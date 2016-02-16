@@ -45,3 +45,17 @@ Loads an html document and insert it into htmlElementId
 
     {{foreach iterableVariable loadtemplate template.html at htmlElementId}}
 Loads a template and iterates over an object or array. The template is loaded as many times as the iterableVariable is iterable, with the iterableVariable being passed as the local context for another round of templating on the loaded template.
+
+#Advanced Templating
+
+Users may wish to perform more significant templating logic, for which they may use a replacement matrix which will define keywords to look for and logic to execute in replacing those keywords.
+
+TemplateEngine.ParseAndReplace accepts a replaceMatrix which can be used to define more sohpisticated templating needs. In the example below the html {{email_subscription}} is replaced by the word "CHECKED" which checks a checkbox if the user is subscribed to email newsletters.
+
+    var callback = function(htmlTemplate, divId) {
+        document.getElementById(divId).innerHTML = ParseAndReplace(htmlTemplate, {
+            "{{email_subscrption}}": user.preferences.email_subscription ? "CHECKED" : ""
+        });
+    }
+    TemplateEngine.LoadTemplate("user_email.html", callback, "email_div");
+    
