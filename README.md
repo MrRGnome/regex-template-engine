@@ -8,6 +8,10 @@ To begin using RTE users must first specify the path to their HTML templates by 
 
     TemplateEngine.VIEWS_FOLDER = "/views";
     
+Users may also wish to turn off console logging of the library by setting the debug variable to false.
+
+    TemplateEngine.debug = false;
+    
 Users should also employ a CSS class "hidden" so as to hide the templating work from users before templates are loaded. RTE is configured to remove the "hidden" class from templated regions on load.
 
 Template logic is denoted by double curly brackets bracing templating keywords, such as:
