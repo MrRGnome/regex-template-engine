@@ -40,8 +40,14 @@ Outputs variable as local machine datetime
     {{this}}
 Outputs the local scope, useful in templates called with "foreach"
 
+    {{this.variableName}}
+Outputs a variable within the local scope, useful in templates with "foreach"
+
     {{loadtemplate template.html at htmlElementId}}
 Loads an html document and insert it into htmlElementId
+
+    {{loadtemplate template.html at htmlElementId with scope.variable}}
+Loads an html document and insert it into htmlElementId using scope.variable to populate the template
 
     {{foreach iterableVariable loadtemplate template.html at htmlElementId}}
 Loads a template and iterates over an object or array. The template is loaded as many times as the iterableVariable is iterable, with the iterableVariable being passed as the local context for another round of templating on the loaded template.
