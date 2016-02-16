@@ -89,7 +89,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
             if (loadtemplate != -1 && preDivIndex != -1) {
                 var templateName = matchArr[loadtemplate + 1];
                 //Do template binding
-                var callback = function (ret) {
+                var callback = function (ret, divId) {
 
                     //foreach through template
                     for (var x = 0; x < foreachArr.length; x++) {
@@ -102,7 +102,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
                 };
 
                 //load template
-                TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], callback);
+                TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], callback, divId);
 
             }
 
