@@ -56,10 +56,9 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
                 else {
                     variableValue = TemplateEngine.GetObjFromString(namesArr[n], localScope);
                     variableDictionary[namesArr[n]] = variableValue;
-                    if (TemplateEngine.debug) console.log("binding " + namesArr[n] + " = " + variableValue);
+                    if (TemplateEngine.debug) console.log("setting value " + namesArr[n] + " = " + variableValue);
                 }
 
-                if(TemplateEngine.debug) console.log("localScope parsing: " + namesArr[n] + " = " + variableValue);
                 var re = new RegExp("{{" + namesArr[n] + "}}", "g");
                 html = html.replace(re, variableValue);
             }
@@ -181,14 +180,8 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope) {
     if (localScope == undefined)
         localScope = window;
 
-    if (TemplateEngine.debug) console.log("Finding object " + objectPath + " in " + localScope);
-
     objectPath = objectPath.split(".");
     var foundVariable;
-
-    if (objectPath[0] == "this" && objectPath[1] == "json" && localScope != window) {
-        return JSON.stringify(localScope);
-    }
 
     var json = false;
     if (objectPath[objectPath.length - 1] == "json")
