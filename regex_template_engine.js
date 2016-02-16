@@ -54,7 +54,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
                 if (variableDictionary[namesArr[n]])
                     variableValue = variableDictionary[namesArr[n]];
                 else {
-                    variableValue = GetObjFromString(namesArr[n], localScope);
+                    variableValue = TemplateEngine.GetObjFromString(namesArr[n], localScope);
                     variableDictionary[namesArr[n]] = variableValue;
                     if (TemplateEngine.debug) console.log("binding " + namesArr[n] + " = " + variableValue);
                 }
@@ -181,11 +181,24 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope) {
     if (localScope == undefined)
         localScope = window;
 
+    if (TemplateEngine.debug) console.log("Finding object " + objectPath + " in " + localScope);
+
     objectPath = objectPath.split(".");
     var foundVariable;
 
     if (objectPath[0] == "this" && objectPath[1] == "json" && localScope != window) {
         return JSON.stringify(localScope);
+    }
+
+    var json = false;
+    if (objectPath[objectPath.length - 1] == "json")
+    {
+        json = true;
+        objectPath = objectPath.slice(0, objectPath.length - 1);
+    }
+
+    if (objectPath[0] == "this") {
+        objectPath = objectPath.slice(1, objectPath.length);
     }
 
     var todate = false;
@@ -215,12 +228,10 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope) {
             n++;
         }
 
-    if (foundVariable == undefined)
-        return "";
+    if (foundVariable == undefined || foundVariable == "NaN")
+        foundVariable = "";
 
     if (todate && foundVariable != "") {
-        if (foundVariable == "NaN")
-            return "";
 
         var date;
         if (local) {
@@ -234,6 +245,9 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope) {
         }
 
     }
+
+    if (json)
+        foundVariable = JSON.stringify(foundVariable);
 
     return foundVariable;
 };
