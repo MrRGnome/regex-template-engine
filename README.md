@@ -2,7 +2,7 @@
 A simple javascript templating engine using regex
 
 #Setup
-The Regex Templating Engine (RTE) can be used to load HTML templates and insert javascript content into them before display on the page. It is used by calling the ParseAndReplace() function on templated HTML content.
+The Regex Templating Engine (RTE) can be used to load HTML templates and insert javascript content into them before display on the page. It is used by calling the TemplateEngine.ParseAndReplace() function on templated HTML content, though calling the method explicitly is unnecessary as TemplateEngine.ParseAndReplace() will be automatically called on any html content after the DOM loads.
 
 To begin using RTE users must first specify the path to their HTML templates by setting the variable:
 
