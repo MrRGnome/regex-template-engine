@@ -1,37 +1,16 @@
 var TemplateEngine = {};
 
-TemplateEngine.debug = false;
+TemplateEngine.debug = true;
 
 //Set this folder to wherever your html templates are that will be loaded
 TemplateEngine.VIEWS_FOLDER = "/views";
 
-//queuedActions is a global callback handler used when calls are too dissociated to efectively use promises
-TemplateEngine.queuedActions = [];
-
-//HandleResponse Stores session data and triggers the queuedACtions callback. It will remove any actions from the queued actions array that return true, implying completion.
-TemplateEngine.HandleResponse = function (ret, success, failure) {
-
-    if (ret.success) {
-        success(ret);
-    }
-    else {
-        failure(ret);
-    }
-    if (ret.sessionKey) {
-        //set local session data
-        sessionStorage["sessionKey"] = ret.sessionKey;
-    }
-
-    if (TemplateEngine.queuedActions.length > 0) {
-        $(TemplateEngine.queuedActions).each(function (i) {
-            if (TemplateEngine.debug) console.log(queuedActions[i]);
-            if (TemplateEngine.queuedActions[i] && TemplateEngine.queuedActions[i]()) {
-                TemplateEngine.queuedActions.splice(i, 1);
-                i--;
-            }
-        });
-    }
+//Template Engine start point
+TemplateEngine.Start = function () {
+    document.getElementsByTagName("html")[0].innerHTML = TemplateEngine.ParseAndReplace(document.getElementsByTagName("html")[0].innerHTML, {});
 };
+
+document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
 
 //ParseAndReplace executes a regex search for curly braces in the provided html text and parses their inner content, looking for variable names, template load requests, and repeating logic
 //Accepted html syntax are:
@@ -64,10 +43,12 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
     //find and replace variable names
     var matchNames = html.match(/{{*[^\s}]*}}/g);
     if (matchNames) {
-        $(matchNames).each(function (i) {
+        for (var i = 0; i < matchNames.length; i++)
+        {
             var namesArr = TemplateEngine.ClearBraceTags(matchNames[i]);
             var variableDictionary = {};
-            $(namesArr).each(function (n) {
+            for (var n = 0; n < namesArr.length; n++)
+            {
                 var variableValue;
 
                 if (variableDictionary[namesArr[n]])
@@ -78,21 +59,23 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
                     if (TemplateEngine.debug) console.log("binding " + namesArr[n] + " = " + variableValue);
                 }
 
-                //if(TemplateEngine.debug) console.log("localScope parsing: " + namesArr[n] + " = " + variableValue);
+                if(TemplateEngine.debug) console.log("localScope parsing: " + namesArr[n] + " = " + variableValue);
                 var re = new RegExp("{{" + namesArr[n] + "}}", "g");
                 html = html.replace(re, variableValue);
-            });
-        });
+            }
+        }
+        
     }
 
 
     //find foreach
     var match = html.match(/{{foreach.*}}/g);
     if (match) {
-        //if(TemplateEngine.debug) console.log("length " + match.length);
-        $(match).each(function (x) {
+        if (TemplateEngine.debug) console.log("length " + match.length);
+        for (var i = 0; i < match.length; i++)
+        {
             //Trim tags
-            var matchArr = TemplateEngine.ClearBraceTags(match[x]);
+            var matchArr = TemplateEngine.ClearBraceTags(match[i]);
             var lastMatch = matchArr[matchArr.length - 1];
 
             //Get foreach object
@@ -106,28 +89,26 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
             if (loadtemplate != -1 && preDivIndex != -1) {
                 var templateName = matchArr[loadtemplate + 1];
                 //Do template binding
-                TemplateEngine.queuedActions.push(function () {
-                    if (!sessionStorage[templateName])
-                        return false;
+                var callback = function (ret) {
 
                     //foreach through template
-                    $(foreachArr).each(function (i) {
-                        $("#" + divId).append(TemplateEngine.ParseAndReplace(sessionStorage[templateName], {}, foreachArr[i]));
-                    });
+                    for (var x = 0; x < foreachArr.length; x++) {
+                        document.getElementById(divId).innerHTML += TemplateEngine.ParseAndReplace(ret, {}, foreachArr[x]);
+                    }
 
-                    $("#" + divId).removeClass("hidden");
+                    document.getElementById(divId).classList.remove("hidden");
 
                     return true;
-                })
+                };
 
                 //load template
-                TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1]);
+                TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], callback);
 
             }
 
             //Clear foreach content
             html = html.replace(/{{foreach.*}}/g, "");
-        });
+        }
 
     }
 
@@ -135,7 +116,11 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
     //find loadtemplate
     match = html.match(/{{loadtemplate.*}}/g);
     if (match) {
-        $(match).each(function (x) {
+        for (var x = 0; x < match.length; x++)
+        {
+
+            if (TemplateEngine.debug) console.log("Executing " + match[x]);
+
             //Trim tags
             var matchArr = TemplateEngine.ClearBraceTags(match[x]);
             var templateName = matchArr[1];
@@ -146,7 +131,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
 
 
             if (preDivIndex == -1) {
-                if (TemplateEngine.debug) console.log("unable to load without 'at' keyword. Include 'at #JqueryIdentifier' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
+                if (TemplateEngine.debug) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
                 return;
             }
 
@@ -157,21 +142,14 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
 
             var scopeVariable = localScope ? TemplateEngine.GetObjFromString(varName, localScope) : TemplateEngine.GetObjFromString(varName);
 
-            TemplateEngine.queuedActions.push(function (ret) {
-                if (sessionStorage[templateName]) {
-                    $(divId).html(TemplateEngine.ParseAndReplace(sessionStorage[templateName], {}, scopeVariable));
-                    $(divId).removeClass("hidden");
-                    return true;
-                }
-                else
-                    return false;
-            });
+            var callback = function (ret, divId) {
+                if (TemplateEngine.debug) console.log(" Executing template callback " + divId);
+                document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
+                document.getElementById(divId).classList.remove("hidden");
+            };
 
-            TemplateEngine.LoadTemplate(templateName);
-
-
-
-        });
+            TemplateEngine.LoadTemplate(templateName, callback, divId);
+        }
     }
 
     return html;
@@ -180,17 +158,20 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
 
 //Load template creates a request to load additional content, stores it to session storage if a load is successful, and calls the HandleResponse call back.
 TemplateEngine.loadAttempts = 0;
-TemplateEngine.LoadTemplate = function (filename) {
+TemplateEngine.LoadTemplate = function (filename, callback, divId) {
 
     var fileDir = "";
     if (!filename.match(/http.*:\/\//)) {
         fileDir = TemplateEngine.VIEWS_FOLDER + "/";
     }
 
-    $.get(fileDir + filename, function (ret, statustext, xhr) {
-        var response = function (ret) { if (statustext != "success" && TemplateEngine.loadAttempts < 5) { TemplateEngine.LoadTemplate(filename); TemplateEngine.loadAttempts++; } else sessionStorage[filename] = ret; };
-        TemplateEngine.HandleResponse(ret, response, response);
-    });
+    var r = new XMLHttpRequest();
+    r.open("GET", fileDir + filename, true);
+    r.onreadystatechange = function () {
+        if (r.readyState != 4 || r.status != 200) return;
+        callback(r.responseText, divId);
+    };
+    r.send(null);
 };
 
 //GetObjectFromString attempts to search through the scope provided for a defined variable in the typical javascript format, for example "TemplateEngine.views"
