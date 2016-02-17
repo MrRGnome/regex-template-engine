@@ -1,27 +1,28 @@
 var TemplateEngine = {};
 
-TemplateEngine.debug = true;
+TemplateEngine.DEBUG = true;
 
 //Set this folder to wherever your html templates are that will be loaded
 TemplateEngine.VIEWS_FOLDER = "/views";
 
 //Template Engine start point
 TemplateEngine.Start = function () {
-    document.getElementsByTagName("html")[0].innerHTML = TemplateEngine.ParseAndReplace(document.getElementsByTagName("html")[0].innerHTML, {});
+    document.getElementsByTagName("html")[0].innerHTML = TemplateEngine.ParseAndReplace(document.getElementsByTagName("html")[0].innerHTML);
 };
 
 document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
 
 //ParseAndReplace executes a regex search for curly braces in the provided html text and parses their inner content, looking for variable names, template load requests, and repeating logic
 //Accepted html syntax are:
-//{{ variableName }} - outputs variable content
-//{{ scope.variableName }} - outputs variable content
-//{{ variableName.json }} - outputs variable as stringified json
-//{{ variableName.todate }} - outputs variable as ISO datetime
-//{{ variableName.local }} - outputs variable as local machine datetime
-//{{ this }} - outputs the local scope, useful in templates called with "foreach"
-//{{ loadtemplate template.html at htmlElementId }} - loads an html document and insert it into htmlElementId
-//{{ foreach iterableVariable loadtemplate template.html at htmlElementId }} - loads a template and iterates over an object or array. The template is loaded as many times as the iterableVariable is iterable, with theiterableVariable being passed as the local context for another round of ParsAndReplace on the loaded template.
+//{{variableName}} - outputs variable content
+//{{scope.variableName}} - outputs variable content
+//{{variableName.json}} - outputs variable as stringified json
+//{{variableName.todate}} - outputs variable as ISO datetime
+//{{variableName.local}} - outputs variable as local machine datetime
+//{{this}} - outputs the local scope, useful in templates called with "foreach"
+//{{loadtemplate template.html at htmlElementId}} - loads an html document and insert it into htmlElementId
+//{{loadtemplate template.html at htmlElementId with variableName}} - loads an html document and inserts it into htlmElementId using variableName to populate the template
+//{{foreach iterableVariable loadtemplate template.html at htmlElementId}} - loads a template and iterates over an object or array. The template is loaded as many times as the iterableVariable is iterable, with theiterableVariable being passed as the local context for another round of ParsAndReplace on the loaded template.
 
 //ParseAndreplace also accepts a replaceMatrix which can be used to define for more sohpisticated templating needs. In the example below the html {{email_subscription}} is replaced by the word "CHECKED" which checks a checkbox if the user is subscribed to email newsletters.
 // $("#userProfileBody").html(ParseAndReplace(sessionStorage["userProfileBody.html"], {
@@ -36,7 +37,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
         for (var key in replaceMatrix) {
             var re = new RegExp(key, "g");
             html = html.replace(re, replaceMatrix[key]);
-            if (TemplateEngine.debug) console.log(key + " = " + replaceMatrix[key]);
+            if (TemplateEngine.DEBUG) console.log(key + " = " + replaceMatrix[key]);
         }
     }
 
@@ -56,7 +57,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
                 else {
                     variableValue = TemplateEngine.GetObjFromString(namesArr[n], localScope);
                     variableDictionary[namesArr[n]] = variableValue;
-                    if (TemplateEngine.debug) console.log("setting value " + namesArr[n] + " = " + variableValue);
+                    if (TemplateEngine.DEBUG) console.log("setting value " + namesArr[n] + " = " + variableValue);
                 }
 
                 var re = new RegExp("{{" + namesArr[n] + "}}", "g");
@@ -70,7 +71,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
     //find foreach
     var match = html.match(/{{foreach.*}}/g);
     if (match) {
-        if (TemplateEngine.debug) console.log("length " + match.length);
+        if (TemplateEngine.DEBUG) console.log("length " + match.length);
         for (var i = 0; i < match.length; i++)
         {
             //Trim tags
@@ -118,7 +119,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
         for (var x = 0; x < match.length; x++)
         {
 
-            if (TemplateEngine.debug) console.log("Executing " + match[x]);
+            if (TemplateEngine.DEBUG) console.log("Executing " + match[x]);
 
             //Trim tags
             var matchArr = TemplateEngine.ClearBraceTags(match[x]);
@@ -130,19 +131,19 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope) {
 
 
             if (preDivIndex == -1) {
-                if (TemplateEngine.debug) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
+                if (TemplateEngine.DEBUG) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
                 return;
             }
 
             if (!templateName) {
-                if (TemplateEngine.debug) console.log("Could not retrieve template name from: " + match[x]);
+                if (TemplateEngine.DEBUG) console.log("Could not retrieve template name from: " + match[x]);
                 return;
             }
 
             var scopeVariable = localScope ? TemplateEngine.GetObjFromString(varName, localScope) : TemplateEngine.GetObjFromString(varName);
 
             var callback = function (ret, divId) {
-                if (TemplateEngine.debug) console.log(" Executing template callback " + divId);
+                if (TemplateEngine.DEBUG) console.log(" Executing template callback " + divId);
                 document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
                 document.getElementById(divId).classList.remove("hidden");
             };
@@ -173,7 +174,7 @@ TemplateEngine.LoadTemplate = function (filename, callback, divId) {
     r.send(null);
 };
 
-//GetObjectFromString attempts to search through the scope provided for a defined variable in the typical javascript format, for example "TemplateEngine.views"
+//GetObjectFromString attempts to search through the scope provided for a defined variable in the typical javascript format, for example "TemplateEngine.DEBUG"
 //Accepts keywords such as "this", ".json" (which provides the JSON.stringify-ied version of the variable), ".todate" (Converts variable to ISO date), ".local" (Converts to local machine date and time)
 TemplateEngine.GetObjFromString = function (objectPath, localScope) {
 
