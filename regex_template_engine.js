@@ -47,12 +47,10 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     //find and replace variable names
     var matchNames = html.match(/{{*[^\s}]*}}/g);
     if (matchNames) {
-        for (var i = 0; i < matchNames.length; i++)
-        {
+        for (var i = 0; i < matchNames.length; i++) {
             var namesArr = TemplateEngine.ClearBraceTags(matchNames[i]);
             var variableDictionary = {};
-            for (var n = 0; n < namesArr.length; n++)
-            {
+            for (var n = 0; n < namesArr.length; n++) {
                 var variableValue;
 
                 if (variableDictionary[namesArr[n]])
@@ -67,11 +65,11 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 variableValue = "<span class='binding_hook_" + fullScope + namesArr[n] + "'>" + variableValue + "</span>";
                 var parentScope = TemplateEngine.GetObjFromString(namesArr[n], localScope, true);
                 var lastTerm = TemplateEngine.GetLastPathTerm(namesArr[n], localScope);
-               
+
 
                 var setFunc = function (val) {
                     if (TemplateEngine.DEBUG) console.log("Searching for binding hook: binding_hook_" + this.prop);
-                    
+
                     var elements = document.getElementsByClassName("binding_hook_" + fullScope + this.prop);
                     for (var index = 0; index < elements.length; index++) {
                         elements[index].innerHTML = val;
@@ -83,7 +81,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
                 parentScope.__defineSetter__("_" + lastTerm, boundSetFunc);
 
-                
+
 
                 /*
                 parentScope = {
@@ -117,7 +115,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 html = html.replace(re, variableValue);
             }
         }
-        
+
     }
 
 
@@ -125,8 +123,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     var match = html.match(/{{foreach.*}}/g);
     if (match) {
         if (TemplateEngine.DEBUG) console.log("length " + match.length);
-        for (var i = 0; i < match.length; i++)
-        {
+        for (var i = 0; i < match.length; i++) {
             //Trim tags
             var matchArr = TemplateEngine.ClearBraceTags(match[i]);
             var lastMatch = matchArr[matchArr.length - 1];
@@ -149,12 +146,11 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                         document.getElementById(divId).innerHTML += TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "].");
                     }
 
-                    document.getElementById(divId).classList.remove("hidden");
-
+                    document.getElementById(divId).className = document.getElementById(divId).className.replace(/hidden/g, "");
                     return true;
                 };
 
-                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr});
+                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr });
 
                 //load template
                 TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], boundCallback, divId);
@@ -171,8 +167,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     //find loadtemplate
     match = html.match(/{{loadtemplate.*}}/g);
     if (match) {
-        for (var x = 0; x < match.length; x++)
-        {
+        for (var x = 0; x < match.length; x++) {
 
             if (TemplateEngine.DEBUG) console.log("Executing " + match[x]);
 
@@ -200,7 +195,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var callback = function (ret, divId) {
                 if (TemplateEngine.DEBUG) console.log(" Executing template callback " + divId);
                 document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
-                document.getElementById(divId).classList.remove("hidden");
+                document.getElementById(divId).className = document.getElementById(divId).className.replace(/hidden/g, "");
             };
 
             TemplateEngine.LoadTemplate(templateName, callback, divId);
@@ -212,7 +207,6 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
 
 //Load template creates a request to load additional content, stores it to session storage if a load is successful, and calls the HandleResponse call back.
-TemplateEngine.loadAttempts = 0;
 TemplateEngine.LoadTemplate = function (filename, callback, divId) {
 
     var fileDir = "";
@@ -239,15 +233,13 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
     objectPath = objectPath.split(".");
     var foundVariable;
 
-    if (getLocalScope)
-    {
+    if (getLocalScope) {
         if (objectPath.length == 1)
             return localScope;
     }
 
     var json = false;
-    if (objectPath[objectPath.length - 1] == "json")
-    {
+    if (objectPath[objectPath.length - 1] == "json") {
         json = true;
         objectPath = objectPath.slice(0, objectPath.length - 1);
     }
