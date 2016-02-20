@@ -146,7 +146,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                         document.getElementById(divId).innerHTML += TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "].");
                     }
 
-                    document.getElementById(divId).className = document.getElementById(divId).className.replace(/( |\b)hidden( |\b)/g, "");
+                    document.getElementById(divId).className = document.getElementById(divId).className.replace(/( |\b)hidden( |\b)/g, " ");
                     return true;
                 };
 
@@ -195,7 +195,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var callback = function (ret, divId) {
                 if (TemplateEngine.DEBUG) console.log("Executing template callback " + divId);
                 document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
-                document.getElementById(divId).className = document.getElementById(divId).className.replace(/( |\b)hidden( |\b)/g, "");
+                document.getElementById(divId).className = document.getElementById(divId).className.replace(/( |\b)hidden( |\b)/g, " ");
             };
 
             TemplateEngine.LoadTemplate(templateName, callback, divId);
