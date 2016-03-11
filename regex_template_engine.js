@@ -1,14 +1,28 @@
 ﻿var TemplateEngine = {};
+templateEngine.settings = {};
 
-TemplateEngine.DEBUG = true;
-TemplateEngine.BINDING = false;
+//Set this to wherever your html templates are that will be loaded relative to your root directory, include a leading slash and no trailing slash. Leave empty if loading from root directory.
+TemplateEngine.settings.VIEWS_FOLDER = "/views";
 
-//Set this folder to wherever your html templates are that will be loaded
-TemplateEngine.VIEWS_FOLDER = "/views";
+//Set this to a css class name which includes the property "display: hidden;"
+TemplateEngine.settings.HIDDEN_CLASS = "hidden";
+
+//Auto parse document
+TemplateEngine.settings.AUTOLOAD = true;
+
+//Enable one-way binding where changes to the javascript variable are reflected to the HTML template (Alpha feature, may experience bugs. Disabled by default)
+TemplateEngine.settings.BINDING = false;
+
+//Enable debug output to js console (WARNGING - TRUE MAY CAUSE PERFOMANCE SLOW DOWN FOR LARGE LOADS)
+TemplateEngine.settings.DEBUG = true;
+
+
+
 
 //Template Engine start point
 TemplateEngine.Start = function () {
-    $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));//document.getElementsByTagName("html")[0].innerHTML = TemplateEngine.ParseAndReplace(document.getElementsByTagName("html")[0].innerHTML);
+    if (TemplateEngine.settings.AUTOLOAD)
+        $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));
 };
 
 document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
@@ -41,7 +55,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
         for (var key in replaceMatrix) {
             var re = new RegExp(key, "g");
             html = html.replace(re, replaceMatrix[key]);
-            if (TemplateEngine.DEBUG) console.log(key + " = " + replaceMatrix[key]);
+            if (TemplateEngine.settings.DEBUG) console.log(key + " = " + replaceMatrix[key]);
         }
     }
 
@@ -53,7 +67,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var variableDictionary = {};
             for (var n = 0; n < namesArr.length; n++) {
                 var variableValue;
-                var binding = TemplateEngine.BINDING;
+                var binding = TemplateEngine.settings.BINDING;
 
                 if (namesArr[n].match(/.nobind/g)) {
                     binding = false;
@@ -70,7 +84,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 else {
                     variableValue = TemplateEngine.GetObjFromString(namesArr[n], localScope);
                     variableDictionary[namesArr[n]] = variableValue;
-                    if (TemplateEngine.DEBUG) console.log("setting value " + namesArr[n] + " = " + variableValue);
+                    if (TemplateEngine.settings.DEBUG) console.log("setting value " + namesArr[n] + " = " + variableValue);
                 }
 
                 //add binding hooks
@@ -81,7 +95,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
                     if (parentScope && lastTerm) {
                         var setFunc = function (val) {
-                            if (TemplateEngine.DEBUG) console.log("Searching for binding hook: binding_hook_" + this.prop);
+                            if (TemplateEngine.settings.DEBUG) console.log("Searching for binding hook: binding_hook_" + this.prop);
 
                             var elements = document.getElementsByClassName("binding_hook_" + fullScope + this.prop);
                             for (var index = 0; index < elements.length; index++) {
@@ -97,7 +111,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
                     }
                     else
-                        if (TemplateEngine.DEBUG) console.log("Unable to perform binding, variable undefined");
+                        if (TemplateEngine.settings.DEBUG) console.log("Unable to perform binding, variable undefined");
 
                 }
 
@@ -114,7 +128,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     if (match) {
         for (var i = 0; i < match.length; i++) {
 
-            if (TemplateEngine.DEBUG) console.log("Executing: " + match[i]);
+            if (TemplateEngine.settings.DEBUG) console.log("Executing: " + match[i]);
 
             //Trim tags
             var matchArr = TemplateEngine.ClearBraceTags(match[i]);
@@ -122,7 +136,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
             //Get foreach object
             var foreachArr = localScope ? TemplateEngine.GetObjFromString(matchArr[1], localScope) : TemplateEngine.GetObjFromString(matchArr[1]);
-            if (TemplateEngine.DEBUG) console.log("foreach length: " + foreachArr.length);
+            if (TemplateEngine.settings.DEBUG) console.log("foreach length: " + foreachArr.length);
 
             //look for keywords
             var loadtemplate = matchArr.indexOf("loadtemplate");
@@ -140,7 +154,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                     }
                     if (cb)
                         cb();
-                    $(document.getElementById(divId)).removeClass("hidden");
+                    $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
                     return true;
                 };
 
@@ -163,7 +177,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     if (match) {
         for (var x = 0; x < match.length; x++) {
 
-            if (TemplateEngine.DEBUG) console.log("Executing " + match[x]);
+            if (TemplateEngine.settings.DEBUG) console.log("Executing " + match[x]);
 
             //Trim tags
             var matchArr = TemplateEngine.ClearBraceTags(match[x]);
@@ -175,21 +189,21 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
 
             if (preDivIndex == -1) {
-                if (TemplateEngine.DEBUG) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
+                if (TemplateEngine.settings.DEBUG) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
                 return;
             }
 
             if (!templateName) {
-                if (TemplateEngine.DEBUG) console.log("Could not retrieve template name from: " + match[x]);
+                if (TemplateEngine.settings.DEBUG) console.log("Could not retrieve template name from: " + match[x]);
                 return;
             }
 
             var scopeVariable = localScope ? TemplateEngine.GetObjFromString(varName, localScope) : TemplateEngine.GetObjFromString(varName);
 
             var callback = function (ret, divId) {
-                if (TemplateEngine.DEBUG) console.log("Executing template callback " + divId);
+                if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + divId);
                 $(document.getElementById(divId)).html(TemplateEngine.ParseAndReplace(ret, {}, scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
-                $(document.getElementById(divId)).removeClass("hidden");
+                $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
                 if (cb)
                     cb();
             };
@@ -209,7 +223,7 @@ TemplateEngine.LoadTemplate = function (filename, callback, divId) {
 
     var fileDir = "";
     if (!filename.match(/http.*:\/\//)) {
-        fileDir = TemplateEngine.VIEWS_FOLDER + "/";
+        fileDir = TemplateEngine.settings.VIEWS_FOLDER + "/";
     }
 
     var r = new XMLHttpRequest();
@@ -221,7 +235,7 @@ TemplateEngine.LoadTemplate = function (filename, callback, divId) {
     r.send(null);
 };
 
-//GetObjectFromString attempts to search through the scope provided for a defined variable in the typical javascript format, for example "TemplateEngine.DEBUG"
+//GetObjectFromString attempts to search through the scope provided for a defined variable in the typical javascript format, for example "TemplateEngine.settings.DEBUG"
 //Accepts keywords such as "this", ".json" (which provides the JSON.stringify-ied version of the variable), ".todate" (Converts variable to ISO date), ".local" (Converts to local machine date and time)
 TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScope) {
 
