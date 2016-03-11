@@ -13,7 +13,7 @@ To begin using RTE users must examine the TemplateEngine.settings, defined at th
 Setting TemplateEngine.settings.VIEWS_FOLDER to "" will load templates from the root directory, while subdirectories can be specified in the template loading command itself.
 
 
-The RTE uses a css class to hide templated content before it is loaded. If you create a CSS class with the "display: hidden;" property set and apply it to your templated content, RTE will remove that class once the tempalte is loaded. You can specify the name of the class you are using to hide templating keywords with the settings variable:
+The RTE uses a css class to hide templated content before it is loaded. If you create a CSS class with the "display: hidden;" property set and apply it to your templated content, RTE will remove that class once the template is loaded. You can specify the name of the class you are using to hide templating keywords with the settings variable:
 
     TemplateEngine.settings.HIDDEN_CLASS = "hidden";
 
