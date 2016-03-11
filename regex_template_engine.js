@@ -1,13 +1,14 @@
-var TemplateEngine = {};
+﻿var TemplateEngine = {};
 
-TemplateEngine.DEBUG = true;
+TemplateEngine.DEBUG = false;
+TemplateEngine.BINDING = false;
 
 //Set this folder to wherever your html templates are that will be loaded
 TemplateEngine.VIEWS_FOLDER = "/views";
 
 //Template Engine start point
 TemplateEngine.Start = function () {
-    document.getElementsByTagName("html")[0].innerHTML = TemplateEngine.ParseAndReplace(document.getElementsByTagName("html")[0].innerHTML);
+    $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));//document.getElementsByTagName("html")[0].innerHTML = TemplateEngine.ParseAndReplace(document.getElementsByTagName("html")[0].innerHTML);
 };
 
 document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
@@ -29,7 +30,7 @@ document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
 //"{{email_subscrption}}": user.preferences.email_subscription ? "CHECKED" : ""
 //}));
 
-TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, fullScope) {
+TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, fullScope, cb) {
     if (!fullScope)
         fullScope = "";
 
@@ -52,6 +53,19 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var variableDictionary = {};
             for (var n = 0; n < namesArr.length; n++) {
                 var variableValue;
+                var binding = TemplateEngine.BINDING;
+
+                if (namesArr[n].match(/.nobind/g))
+                {
+                    binding = false;
+                    namesArr[n].replace(/.nobind/g, "");
+                }
+                    
+                if (namesArr[n].match(/.bind/g))
+                {
+                    binding = true;
+                    namesArr[n].replace(/.bind/g, "");
+                }
 
                 if (variableDictionary[namesArr[n]])
                     variableValue = variableDictionary[namesArr[n]];
@@ -62,54 +76,32 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 }
 
                 //add binding hooks
-                variableValue = "<span class='binding_hook_" + fullScope + namesArr[n] + "'>" + variableValue + "</span>";
-                var parentScope = TemplateEngine.GetObjFromString(namesArr[n], localScope, true);
-                var lastTerm = TemplateEngine.GetLastPathTerm(namesArr[n], localScope);
+                if (binding) {
+                    variableValue = "<span class='binding_hook_" + fullScope + namesArr[n] + "'>" + variableValue + "</span>";
+                    var parentScope = TemplateEngine.GetObjFromString(namesArr[n], localScope, true);
+                    var lastTerm = TemplateEngine.GetLastPathTerm(namesArr[n], localScope);
+
+                    if (parentScope && lastTerm) {
+                        var setFunc = function (val) {
+                            if (TemplateEngine.DEBUG) console.log("Searching for binding hook: binding_hook_" + this.prop);
+
+                            var elements = document.getElementsByClassName("binding_hook_" + fullScope + this.prop);
+                            for (var index = 0; index < elements.length; index++) {
+                                elements[index].innerHTML = val;
+                            }
+                            parentScope[lastTerm] = val;
+                        };
+
+                        var boundSetFunc = setFunc.bind({ prop: namesArr[n], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope });
+
+                        parentScope.__defineSetter__("_" + lastTerm, boundSetFunc);
 
 
-                var setFunc = function (val) {
-                    if (TemplateEngine.DEBUG) console.log("Searching for binding hook: binding_hook_" + this.prop);
-
-                    var elements = document.getElementsByClassName("binding_hook_" + fullScope + this.prop);
-                    for (var index = 0; index < elements.length; index++) {
-                        elements[index].innerHTML = val;
                     }
-                    parentScope[lastTerm] = val;
-                };
+                    else
+                        if (TemplateEngine.DEBUG) console.log("Unable to perform binding, variable undefined");
 
-                var boundSetFunc = setFunc.bind({ prop: namesArr[n], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope });
-
-                parentScope.__defineSetter__("_" + lastTerm, boundSetFunc);
-
-
-
-                /*
-                parentScope = {
-                    set value(val) {
-                        if (TemplateEngine.DEBUG) console.log("Searching for binding hook: binding_hook_" + namesArr[n]);
-                        var elements = document.GetElementsByClassName("binding_hook_" + namesArr[n]);
-                        for (element in elements) {
-                            element.innerHTML = val;
-                        }
-                    }
-                };
-
-                parentScope[lastTerm] = undefined;
-
-
-                Object.defineProperty(parentScope, lastTerm, {
-                    set: function (val) {
-                        if (TemplateEngine.DEBUG) console.log("Searching for binding hook: binding_hook_" + namesArr[n]);
-                        var elements = document.GetElementsByClassName("binding_hook_" + namesArr[n]);
-                        for(element in elements)
-                        {
-                            element.innerHTML = val;
-                        }
-                    },
-                    configurable: true
-                });
-
-                parentScope[lastTerm] = variableValue;*/
+                }
 
                 var re = new RegExp("{{" + namesArr[n] + "}}", "g");
                 html = html.replace(re, variableValue);
@@ -122,14 +114,17 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     //find foreach
     var match = html.match(/{{foreach.*}}/g);
     if (match) {
-        if (TemplateEngine.DEBUG) console.log("length " + match.length);
         for (var i = 0; i < match.length; i++) {
+
+            if (TemplateEngine.DEBUG) console.log("Executing: " + match[i]);
+
             //Trim tags
             var matchArr = TemplateEngine.ClearBraceTags(match[i]);
             var lastMatch = matchArr[matchArr.length - 1];
 
             //Get foreach object
             var foreachArr = localScope ? TemplateEngine.GetObjFromString(matchArr[1], localScope) : TemplateEngine.GetObjFromString(matchArr[1]);
+            if (TemplateEngine.DEBUG) console.log("foreach length: " + foreachArr.length);
 
             //look for keywords
             var loadtemplate = matchArr.indexOf("loadtemplate");
@@ -143,14 +138,15 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
                     //foreach through template
                     for (var x = 0; x < foreachArr.length; x++) {
-                        document.getElementById(divId).innerHTML += TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "].");
+                        $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "].")); //document.getElementById(divId).innerHTML += TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "].");
                     }
-
-                    document.getElementById(divId).className = document.getElementById(divId).className.replace(/( |\b)hidden( |\b)/g, " ");
+                    if (cb)
+                        cb();
+                    $(document.getElementById(divId)).removeClass("hidden");
                     return true;
                 };
 
-                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr });
+                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr,  cb: cb});
 
                 //load template
                 TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], boundCallback, divId);
@@ -194,11 +190,15 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
             var callback = function (ret, divId) {
                 if (TemplateEngine.DEBUG) console.log("Executing template callback " + divId);
-                document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
-                document.getElementById(divId).className = document.getElementById(divId).className.replace(/( |\b)hidden( |\b)/g, " ");
+                $(document.getElementById(divId)).html(TemplateEngine.ParseAndReplace(ret, {}, scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
+                $(document.getElementById(divId)).removeClass("hidden");
+                if (cb)
+                    cb();
             };
 
-            TemplateEngine.LoadTemplate(templateName, callback, divId);
+            var boundCallback = callback.bind({ cb: cb });
+
+            TemplateEngine.LoadTemplate(templateName, boundCallback, divId);
         }
     }
 
@@ -229,43 +229,55 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
 
     if (localScope == undefined)
         localScope = window;
-
-    objectPath = objectPath.split(".");
-    var foundVariable;
-
+    
+    //Do all pre-object serach template parsing
+    
+    //Avoid digging through path if already parsed down
     if (getLocalScope) {
         if (objectPath.length == 1)
             return localScope;
     }
 
     var json = false;
-    if (objectPath[objectPath.length - 1] == "json") {
+    if (objectPath.match(/.json/)) {
         json = true;
-        objectPath = objectPath.slice(0, objectPath.length - 1);
+        objectPath = objectPath.replace(/\.json/g);
     }
 
-    if (objectPath[0] == "this") {
-        objectPath = objectPath.slice(1, objectPath.length);
-    }
+    //I don't need this.
+    if (objectPath.match("this"))
+        objectPath = objectPath.replace(/this\.|this/g);
 
     var todate = false;
     var local = false;
-    if (objectPath[objectPath.length - 1] == "todate") {
+    if (objectPath.match(/\.todate/)) {
         todate = true;
-        objectPath = objectPath.slice(0, objectPath.length - 1);
+        objectPath = objectPath.replace(/\.todate/g);
 
-        if (objectPath[objectPath.length - 1] == "local") {
+        if (objectPath.match(/\.local/)) {
             local = true;
-            objectPath = objectPath.slice(0, objectPath.length - 1);
+            objectPath = objectPath.replace(/\.local/g);
         }
     }
 
+    var replaceWhite = false;
+    var replaceWith = "";
+    if (objectPath.match(/\.replace-whitespace/)) {
+        replaceWhite = true;
+        replaceWith = objectPath.match(/\.replace-whitespace\.(.[^.\n]*)/g);
+        objectPath = objectPath.replace(/\.replace-whitespace\..[^.\n]*/g);
+    }
+
+
+    //Start object search
+    objectPath = objectPath.split(".");
+    var foundVariable;
     var n = 0;
     var tmp = localScope;
     if (objectPath.length == 0)
         foundVariable = localScope;
     else
-        while (!foundVariable) {
+        while (!foundVariable && tmp != undefined) {
             tmp = tmp[objectPath[n]];
 
             if (n == objectPath.length - 1) {
@@ -278,6 +290,7 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
             n++;
         }
 
+    //Apply object templating and return values
     if (foundVariable == undefined || foundVariable == "NaN")
         foundVariable = "";
 
@@ -296,6 +309,13 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
 
     }
 
+    if (replaceWhite)
+    {
+        var re = new RegExp(" ", "g");
+        foundVariable = foundVariable.replace(re, replaceWith);
+    }
+        
+
     if (json)
         foundVariable = JSON.stringify(foundVariable);
 
@@ -311,6 +331,7 @@ TemplateEngine.ClearBraceTags = function (arr) {
     return arr.split(" ");
 };
 
+//Used for getting the last term of a path for binding purposes
 TemplateEngine.GetLastPathTerm = function (objectPath, localScope) {
     objectPath = objectPath.split(".");
     var suffixs = ["this", "json", "todate", "local"];
