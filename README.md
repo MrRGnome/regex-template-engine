@@ -77,8 +77,12 @@ Outputs variable as local machine datetime
 Replaces white space in variable string with "_" literal (or any other literal characters in its place), useful for using string values as html attributes for deeply nested templates
 
 
-   {{variableName.bind}}
+    {{variableName.bind}}
 Binds the template to the javascript variable, where-in changes to the javascript variable will be reflected to the template (Does not require TemplateEngine.settings.BINDING to be true)
+
+
+    {{variableName.unbind}}
+If global binding is enabled, .unbind will not bind this specific variable when templated.
 
 
     {{this}}
