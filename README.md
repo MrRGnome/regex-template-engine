@@ -40,7 +40,7 @@ The parameters of TemplateEngine.ParseAndReplace are described as follows:
 
 One-way binding is an alpha feature and can be globally enabled for every variable by setting:
 
-    TemplateEngine.BINDING = true;
+    TemplateEngine.settings.BINDING = true;
 
 which will cause any change in the javascript variables being used to reflect to the template.
 
