@@ -1,0 +1,20 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+    <script src="../regex_template_engine.js"></script>
+    <script src="rte-tests.js"></script>
+
+    <meta charset="utf-8" />
+    <title>Regex Template Engine Tests Report</title>
+</head>
+<body>
+    <h1>Regex Template Engine Test Report</h1>
+    <h3>To run tests type Tests.RunAll() or press <button onclick="Tests.RunAll()">this button</button></h3>
+    <h3><button onclick="for (var r in Tests.results) $('#results').append(Tests.results[r] + '<br/>');">View Results</button></h3>
+    <div id="results">
+        template : success : processingTime <br/>
+    </div>
+</body>
+</html>

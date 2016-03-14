@@ -1,5 +1,5 @@
 ﻿var TemplateEngine = {};
-templateEngine.settings = {};
+TemplateEngine.settings = {};
 
 //Set this to wherever your html templates are that will be loaded relative to your root directory, include a leading slash and no trailing slash. Leave empty if loading from root directory.
 TemplateEngine.settings.VIEWS_FOLDER = "/views";
@@ -150,7 +150,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
                     //foreach through template
                     for (var x = 0; x < foreachArr.length; x++) {
-                        $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "].")); //document.getElementById(divId).innerHTML += TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "].");
+                        $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "]."));
                     }
                     if (cb)
                         cb();
@@ -164,6 +164,8 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], boundCallback, divId);
 
             }
+            else
+                if (TemplateEngine.settings.DEBUG) console.log("Foreach failed due to no loadtemplate command or no divId");
 
             //Clear foreach content
             html = html.replace(/{{foreach.*}}/g, "");
@@ -251,24 +253,28 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
     }
 
     var json = false;
-    if (objectPath.match(/.json/)) {
+    if (objectPath.match(/\.json/)) {
         json = true;
-        objectPath = objectPath.replace(/\.json/g);
+        objectPath = objectPath.replace(/\.json/g, "");
     }
 
     //I don't need this.
-    if (objectPath.match("this"))
-        objectPath = objectPath.replace(/this\.|this/g);
+    if (objectPath.match("this")) {
+        objectPath = objectPath.replace(/this\./g, "");
+        if (objectPath == "this")
+            return localScope;
+    }
+        
 
     var todate = false;
     var local = false;
     if (objectPath.match(/\.todate/)) {
         todate = true;
-        objectPath = objectPath.replace(/\.todate/g);
+        objectPath = objectPath.replace(/\.todate/g, "");
 
         if (objectPath.match(/\.local/)) {
             local = true;
-            objectPath = objectPath.replace(/\.local/g);
+            objectPath = objectPath.replace(/\.local/g, "");
         }
     }
 
@@ -276,8 +282,9 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
     var replaceWith = "";
     if (objectPath.match(/\.replace-whitespace/)) {
         replaceWhite = true;
-        replaceWith = objectPath.match(/\.replace-whitespace\.(.[^.\n]*)/g);
-        objectPath = objectPath.replace(/\.replace-whitespace\..[^.\n]*/g);
+        var re = new RegExp("(?:\.replace-whitespace\.)(.[^.\n]*)", "g");
+        replaceWith = re.exec(objectPath)[1];
+        objectPath = objectPath.replace(/\.replace-whitespace\..[^.\n]*/g, "");
     }
 
 
