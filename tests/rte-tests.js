@@ -5,6 +5,8 @@ scope.long = {};
 scope.long.very = {};
 scope.long.very.scopedVar = "Scoped Variable";
 scope.long.very.date = Date.now();
+scope.long.very.boundVar = "unbound";
+scope.long.very.unboundVar = "unbound";
 var testArr = ["One", "Two", "Three"];
 Tests.results = [];
 
@@ -85,6 +87,60 @@ Tests.LocalScopeVar.run = function () {
     Tests.results.push(Tests.LocalScopeVar.template + " : " + Tests.LocalScopeVar.success + " : " + Tests.LocalScopeVar.processingTime);
 };
 
+//variable - bind
+Tests.BindVar = {};
+Tests.BindVar.template = "{{scope.long.very.boundVar.bind}}";
+Tests.BindVar.expectedResult = "bound";
+Tests.BindVar.result = "";
+Tests.BindVar.success = false;
+Tests.BindVar.processingTime = 0;
+Tests.BindVar.run = function () {
+    TemplateEngine.settings.BINDING = false;
+    var startTime = Date.now();
+
+    var callback = function () {
+        Tests.BindVar.processingTime = Date.now() - this.startTime;
+        
+
+        setTimeout(function () {
+            scope.long.very._boundVar = "bound";
+            Tests.BindVar.result = document.getElementsByClassName("binding_hook_scope.long.very.boundVar.bind")[0].innerHTML;
+            Tests.BindVar.success = Tests.BindVar.expectedResult == Tests.BindVar.result;
+            Tests.results.push(Tests.BindVar.template + " : " + Tests.BindVar.success + " : " + Tests.BindVar.processingTime);
+        }, 100);
+    }
+    callback = callback.bind({ "startTime": startTime });
+
+    $(document.getElementsByTagName("body")[0]).append("<div style='display: none'>" + TemplateEngine.ParseAndReplace(Tests.BindVar.template, null, null, null, callback) + "</div>");
+};
+
+
+//variable - unbind
+Tests.UnBindVar = {};
+Tests.UnBindVar.template = "{{scope.long.very.unboundVar.unbind}}";
+Tests.UnBindVar.expectedResult = "unbound";
+Tests.UnBindVar.result = "";
+Tests.UnBindVar.success = false;
+Tests.UnBindVar.processingTime = 0;
+Tests.UnBindVar.run = function () {
+    TemplateEngine.settings.BINDING = true;
+    var startTime = Date.now();
+
+    var callback = function () {
+        Tests.UnBindVar.processingTime = Date.now() - this.startTime;
+        TemplateEngine.settings.BINDING = false;
+        setTimeout(function () {
+            scope.long.very._unboundVar = "bound";
+            Tests.UnBindVar.result = document.getElementById("unboundTest").innerHTML;
+            Tests.UnBindVar.success = Tests.UnBindVar.expectedResult == Tests.UnBindVar.result;
+            Tests.results.push(Tests.UnBindVar.template + " : " + Tests.UnBindVar.success + " : " + Tests.UnBindVar.processingTime);
+        }, 100);
+    }
+    callback = callback.bind({ "startTime": startTime });
+
+    $(document.getElementsByTagName("body")[0]).append("<div style='display: none' id='unboundTest'>" + TemplateEngine.ParseAndReplace(Tests.UnBindVar.template, null, null, null, callback) + "</div>");
+};
+
 //variable - replace-whitespace._
 Tests.ReplaceScopeVar = {};
 Tests.ReplaceScopeVar.template = "{{scope.long.very.scopedVar.replace-whitespace._}}";
@@ -144,9 +200,9 @@ Tests.LoadTemplate.run = function () {
     $(document.getElementsByTagName("body")[0]).append("<div style='display: none;' id='loadtemplateTest'></div>");
 
     var callback = function () {
+        Tests.LoadTemplate.processingTime = Date.now() - this.startTime;
         Tests.LoadTemplate.result = document.getElementById("loadtemplateTest").innerHTML;
         Tests.LoadTemplate.success = Tests.LoadTemplate.expectedResult == Tests.LoadTemplate.result;
-        Tests.LoadTemplate.processingTime = Date.now() - startTime;
         Tests.results.push(Tests.LoadTemplate.template + " : " + Tests.LoadTemplate.success + " : " + Tests.LoadTemplate.processingTime);
     }
     callback = callback.bind({ "startTime": startTime });
@@ -173,9 +229,9 @@ Tests.ForeachTemplate.run = function () {
     $(document.getElementsByTagName("body")[0]).append("<div style='display: none;' id='foreachTest'></div>");
 
     var callback = function () {
+        Tests.ForeachTemplate.processingTime = Date.now() - this.startTime;
         Tests.ForeachTemplate.result = document.getElementById("foreachTest").innerHTML;
         Tests.ForeachTemplate.success = Tests.ForeachTemplate.expectedResult == Tests.ForeachTemplate.result;
-        Tests.ForeachTemplate.processingTime = Date.now() - startTime;
         Tests.results.push(Tests.ForeachTemplate.template + " : " + Tests.ForeachTemplate.success + " : " + Tests.ForeachTemplate.processingTime);
     }
     callback = callback.bind({ "startTime": startTime });

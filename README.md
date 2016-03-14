@@ -13,7 +13,7 @@ To begin using RTE users must examine the TemplateEngine.settings, defined at th
 Setting TemplateEngine.settings.VIEWS_FOLDER to "" will load templates from the root directory, while subdirectories can be specified in the template loading command itself.
 
 
-The RTE uses a css class to hide templated content before it is loaded. If you create a CSS class with the "display: hidden;" property set and apply it to your templated content, RTE will remove that class once the template is loaded. You can specify the name of the class you are using to hide templating keywords with the settings variable:
+The RTE uses a css class to hide templated content before it is loaded. If you create a CSS class with the "display: none;" property set and apply it to your templated content, RTE will remove that class once the template is loaded. You can specify the name of the class you are using to hide templating keywords with the settings variable:
 
     TemplateEngine.settings.HIDDEN_CLASS = "hidden";
 
@@ -42,7 +42,11 @@ One-way binding is an alpha feature and can be globally enabled for every variab
 
     TemplateEngine.settings.BINDING = true;
 
-which will cause any change in the javascript variables being used to reflect to the template.
+which will create a setter variable in the same location as the bound variable, but with an underscore preceding, which when set will update the original bound variable as well as the UI the variable was bound to. Example:
+
+    {{scope.variable.bind}}
+
+will bind the variable `scope._variable` to both `scope.variable` and the UI where `{{scope.variable.bind}}` is used. Setting the value of `scope._variable` will update all bound values. The .bind suffix is unnecessary if the global bind setting is set to true.
 
 
 Users may also wish to turn off console logging of the library by setting the debug variable to false. (It's true by default, but false provides some performance gains)
@@ -78,7 +82,7 @@ Replaces white space in variable string with "_" literal (or any other literal c
 
 
     {{variableName.bind}}
-Binds the template to the javascript variable, where-in changes to the javascript variable will be reflected to the template (Does not require TemplateEngine.settings.BINDING to be true)
+Binds the template to the javascript variable, where-in a binding interface is created with the same name as the javascript variable being bound except with an underscore preceding. I.E. scope._variableName. Any value set to the binding interface (_variableName) will propogate to the UI as well as the original javascript variable. (Does not require TemplateEngine.settings.BINDING to be true)
 
 
     {{variableName.unbind}}

@@ -51,6 +51,8 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     if (!localScope)
         localScope = window;
 
+    var requiresRecursion = false;
+
     if (replaceMatrix) {
         for (var key in replaceMatrix) {
             var re = new RegExp(key, "g");
@@ -69,15 +71,15 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 var variableValue;
                 var binding = TemplateEngine.settings.BINDING;
 
-                if (namesArr[n].match(/.nobind/g)) {
+                if (namesArr[n].match(/\.unbind/g)) {
                     binding = false;
-                    namesArr[n].replace(/.nobind/g, "");
+                    namesArr[n].replace(/\.unbind/g, "");
                 }
-
-                if (namesArr[n].match(/.bind/g)) {
-                    binding = true;
-                    namesArr[n].replace(/.bind/g, "");
-                }
+                else
+                    if (namesArr[n].match(/\.bind/g)) {
+                        binding = true;
+                        namesArr[n].replace(/\.bind/g, "");
+                    }
 
                 if (variableDictionary[namesArr[n]])
                     variableValue = variableDictionary[namesArr[n]];
@@ -95,7 +97,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
                     if (parentScope && lastTerm) {
                         var setFunc = function (val) {
-                            if (TemplateEngine.settings.DEBUG) console.log("Searching for binding hook: binding_hook_" + this.prop);
+                            if (TemplateEngine.settings.DEBUG) console.log("Searching for binding hook: binding_hook_" + fullScope + this.prop);
 
                             var elements = document.getElementsByClassName("binding_hook_" + fullScope + this.prop);
                             for (var index = 0; index < elements.length; index++) {
@@ -103,6 +105,8 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                             }
                             parentScope[lastTerm] = val;
                         };
+
+                        if (TemplateEngine.settings.DEBUG) console.log("Setting up binding hook on: " + JSON.stringify(parentScope));
 
                         var boundSetFunc = setFunc.bind({ prop: namesArr[n], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope });
 
@@ -122,10 +126,11 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
     }
 
-
+    
     //find foreach
     var match = html.match(/{{foreach.*}}/g);
     if (match) {
+        requiresRecursion = true;
         for (var i = 0; i < match.length; i++) {
 
             if (TemplateEngine.settings.DEBUG) console.log("Executing: " + match[i]);
@@ -177,6 +182,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     //find loadtemplate
     match = html.match(/{{loadtemplate.*}}/g);
     if (match) {
+        requiresRecursion = true;
         for (var x = 0; x < match.length; x++) {
 
             if (TemplateEngine.settings.DEBUG) console.log("Executing " + match[x]);
@@ -216,6 +222,9 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
         }
     }
 
+    if (!requiresRecursion && cb)
+        cb();
+
     return html;
 };
 
@@ -251,6 +260,10 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
         if (objectPath.length == 1)
             return localScope;
     }
+
+    //Remove binding
+    objectPath = objectPath.replace(/\.bind/g, "");
+    objectPath = objectPath.replace(/\.unbind/g, "");
 
     var json = false;
     if (objectPath.match(/\.json/)) {
@@ -352,11 +365,12 @@ TemplateEngine.ClearBraceTags = function (arr) {
 //Used for getting the last term of a path for binding purposes
 TemplateEngine.GetLastPathTerm = function (objectPath, localScope) {
     objectPath = objectPath.split(".");
-    var suffixs = ["this", "json", "todate", "local"];
+    var suffixs = { "this": true, "json": true, "todate": true, "local": true, "unbind": true, "bind": true, "replace-whitespace": true };
     while (suffixs[objectPath[objectPath.length - 1]])
         objectPath = objectPath.slice(0, objectPath.length - 1);
     if (objectPath.length == 0)
         return localScope;
-    else
+    else 
         return objectPath[objectPath.length - 1];
+    
 };
