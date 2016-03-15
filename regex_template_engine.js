@@ -16,6 +16,11 @@ TemplateEngine.settings.BINDING = false;
 //Enable debug output to js console (WARNGING - TRUE MAY CAUSE PERFOMANCE SLOW DOWN FOR LARGE LOADS)
 TemplateEngine.settings.DEBUG = true;
 
+TemplateEngine.settings.ANTI_XHR_CACHING = false;
+TemplateEngine.activeRequests = {};
+
+TemplateEngine.callbackReference = {};
+
 
 
 
@@ -44,14 +49,19 @@ document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
 //"{{email_subscrption}}": user.preferences.email_subscription ? "CHECKED" : ""
 //}));
 
-TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, fullScope, cb) {
+TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, fullScope, cb, hashCode) {
     if (!fullScope)
         fullScope = "";
 
     if (!localScope)
         localScope = window;
 
-    var requiresRecursion = false;
+    //setup callback tracker so I know when we're done
+    if (!hashCode)
+    {
+        hashCode = TemplateEngine.HashCode(html);
+        TemplateEngine.callbackReference[hashCode] = 1;
+    }
 
     if (replaceMatrix) {
         for (var key in replaceMatrix) {
@@ -128,42 +138,52 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
     
     //find foreach
-    var match = html.match(/{{foreach.*}}/g);
+    var match = html.match(/{{foreach.[^}}]*}}/g);
     if (match) {
-        requiresRecursion = true;
+        
         for (var i = 0; i < match.length; i++) {
 
             if (TemplateEngine.settings.DEBUG) console.log("Executing: " + match[i]);
 
             //Trim tags
             var matchArr = TemplateEngine.ClearBraceTags(match[i]);
-            var lastMatch = matchArr[matchArr.length - 1];
 
             //Get foreach object
-            var foreachArr = localScope ? TemplateEngine.GetObjFromString(matchArr[1], localScope) : TemplateEngine.GetObjFromString(matchArr[1]);
+            var foreachArr = TemplateEngine.GetObjFromString(matchArr[1], localScope);
             if (TemplateEngine.settings.DEBUG) console.log("foreach length: " + foreachArr.length);
 
             //look for keywords
             var loadtemplate = matchArr.indexOf("loadtemplate");
             var preDivIndex = matchArr.indexOf("at");
+            var preLocalScope = matchArr.indexOf("with");
+            var preCallback = matchArr.indexOf("callback");
+            var instanceCallback = preCallback != -1 ? TemplateEngine.GetObjFromString(matchArr[preCallback + 1], localScope) : null;
             var divId = matchArr[preDivIndex + 1];
+            var definedLocalScope = preLocalScope != -1 ? TemplateEngine.GetObjFromString(matchArr[preLocalScope  + 1], localScope) : null;
+
 
             if (loadtemplate != -1 && preDivIndex != -1) {
                 var templateName = matchArr[loadtemplate + 1];
                 //Do template binding
                 var callback = function (ret, divId) {
-
+                    
                     //foreach through template
                     for (var x = 0; x < foreachArr.length; x++) {
-                        $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "]."));
+                        var scope = this.definedLocalScope ? this.definedLocalScope : this.foreachArr[x]
+                        $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, scope, this.arrPath + "[" + x + "]."));
                     }
-                    if (cb)
-                        cb();
+                    
+                    TemplateEngine.AttemptCallback(this.hash, [this.cb, this.instanceCallback]);
+
                     $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
                     return true;
                 };
 
-                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr, cb: cb });
+                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr, cb: cb , definedLocalScope: definedLocalScope, instanceCallback: instanceCallback, hash: hashCode});
+                
+
+                //Add callback reference so we know when everyone is done working
+                TemplateEngine.callbackReference[hashCode]++;
 
                 //load template
                 TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], boundCallback, divId);
@@ -173,16 +193,16 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 if (TemplateEngine.settings.DEBUG) console.log("Foreach failed due to no loadtemplate command or no divId");
 
             //Clear foreach content
-            html = html.replace(/{{foreach.*}}/g, "");
+            html = html.replace(/{{foreach.[^}}]*}}/g, "");
         }
 
     }
 
 
     //find loadtemplate
-    match = html.match(/{{loadtemplate.*}}/g);
+    match = html.match(/{{loadtemplate.[^}}]*}}/g);
     if (match) {
-        requiresRecursion = true;
+        
         for (var x = 0; x < match.length; x++) {
 
             if (TemplateEngine.settings.DEBUG) console.log("Executing " + match[x]);
@@ -212,24 +232,24 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + divId);
                 $(document.getElementById(divId)).html(TemplateEngine.ParseAndReplace(ret, {}, scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
                 $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
-                if (cb)
-                    cb();
+                TemplateEngine.AttemptCallback(this.hash, [this.cb, this.instanceCallback]);
             };
 
-            var boundCallback = callback.bind({ cb: cb });
+            var boundCallback = callback.bind({ cb: cb, instanceCallback: instanceCallback, hash: hashCode });
+            //Add callback reference so we know when everyone is done working
+            TemplateEngine.callbackReference[hashCode]++;
 
             TemplateEngine.LoadTemplate(templateName, boundCallback, divId);
         }
     }
 
-    if (!requiresRecursion && cb)
-        cb();
+    TemplateEngine.AttemptCallback(hashCode, [cb]);
 
     return html;
 };
 
 
-//Load template creates a request to load additional content, stores it to session storage if a load is successful, and calls the HandleResponse call back.
+//Load template creates a request to load additional content, stores it to session storage if a load is successful, and calls the call back.
 TemplateEngine.LoadTemplate = function (filename, callback, divId) {
 
     var fileDir = "";
@@ -237,10 +257,39 @@ TemplateEngine.LoadTemplate = function (filename, callback, divId) {
         fileDir = TemplateEngine.settings.VIEWS_FOLDER + "/";
     }
 
+    if(TemplateEngine.settings.ANTI_XHR_CACHING)
+    {
+        if (sessionStorage[filename])
+        {
+            callback(sessionStorage[filename], divId);
+            return;
+        }
+
+        if (TemplateEngine.activeRequests[filename])
+        {
+            TemplateEngine.activeRequests[filename].push({ callback: callback, divId: divId });
+            return;
+        }
+            
+        TemplateEngine.activeRequests[filename] = [];
+    }
+
+    
+
+
     var r = new XMLHttpRequest();
     r.open("GET", fileDir + filename, true);
     r.onreadystatechange = function () {
-        if (r.readyState != 4 || r.status != 200) return;
+        if (r.readyState != 4 || r.status != 200)
+            return;
+        if (TemplateEngine.settings.ANTI_XHR_CACHING)
+        {
+            sessionStorage[filename] = r.responseText;
+            for (var i in TemplateEngine.activeRequests[filename])
+                TemplateEngine.activeRequests[filename][i].callback(r.responseText, TemplateEngine.activeRequests[filename][i].divId);
+            TemplateEngine.activeRequests[filename] = null;
+        }
+            
         callback(r.responseText, divId);
     };
     r.send(null);
@@ -373,4 +422,26 @@ TemplateEngine.GetLastPathTerm = function (objectPath, localScope) {
     else 
         return objectPath[objectPath.length - 1];
     
+};
+
+TemplateEngine.HashCode = function (str) {
+    var hash = 0;
+    if (str.length === 0)
+        return hash;
+    for (var i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash;
+};
+
+TemplateEngine.AttemptCallback = function (hash, cbArray) {
+    if (TemplateEngine.callbackReference[hash] && TemplateEngine.callbackReference[hash] <= 1) {
+        TemplateEngine.callbackReference[hash] = null;
+        for (var i in cbArray)
+            if(cbArray[i])
+                cbArray[i]();
+    }
+    else if (TemplateEngine.callbackReference[hash])
+        TemplateEngine.callbackReference[hash]--;
 };

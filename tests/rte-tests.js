@@ -7,8 +7,32 @@ scope.long.very.scopedVar = "Scoped Variable";
 scope.long.very.date = Date.now();
 scope.long.very.boundVar = "unbound";
 scope.long.very.unboundVar = "unbound";
-var testArr = ["One", "Two", "Three"];
 Tests.results = [];
+
+//String repeater for load tests
+Tests.Utilities = {};
+Tests.Utilities.Repeat = function (pattern, count) {
+    if (count < 1) return '';
+    var result = '';
+    while (count > 1) {
+        if (count & 1) result += pattern;
+        count >>= 1, pattern += pattern;
+    }
+    return result + pattern;
+}
+
+Tests.Utilities.MakeArray = function (count) {
+    if (count < 1) return [];
+    var result = [];
+    while (count >= 1) {
+        result.push(String(count));
+        count--;
+    }
+    return result;
+}
+
+var testArr = Tests.Utilities.MakeArray(10);
+
 
 //define tests
 
@@ -239,6 +263,37 @@ Tests.ForeachTemplate.run = function () {
     TemplateEngine.ParseAndReplace(Tests.ForeachTemplate.template, null, null, null, callback);
 };
 
+//Stress test
+Tests.Stress = {};
+Tests.Stress.intensity = 1;
+Tests.Stress.template = Tests.Utilities.Repeat("{{foreach testArr loadtemplate foreach-template.html at stressTest}}", Tests.Stress.intensity);
+Tests.Stress.expectedResult = "";
+for (var i = 0; i < testArr.length; i++) {
+    Tests.Stress.expectedResult += "foreach " + testArr[i];
+}
+Tests.Stress.expectedResult = Tests.Utilities.Repeat(Tests.Stress.expectedResult, Tests.Stress.intensity);
+Tests.Stress.result = "";
+Tests.Stress.success = false;
+Tests.Stress.processingTime = 0;
+Tests.Stress.run = function () {
+    TemplateEngine.settings.ANTI_XHR_CACHING = true;
+    
+    TemplateEngine.settings.VIEWS_FOLDER = "/tests/testviews";
+    $(document.getElementsByTagName("body")[0]).append("<div style='display: none;' id='stressTest'></div>");
+
+    var callback = function () {
+        Tests.Stress.processingTime = Date.now() - this.startTime;
+        console.log("done stress test, time:" + Tests.Stress.processingTime);
+        Tests.Stress.result = document.getElementById("stressTest").innerHTML;
+        Tests.Stress.success = Tests.Stress.expectedResult == Tests.Stress.result;
+        Tests.results.push(Tests.Stress.template + " : " + Tests.Stress.success + " : " + Tests.Stress.processingTime);
+    }
+    var startTime = Date.now();
+    callback = callback.bind({ "startTime": startTime });
+    
+    TemplateEngine.ParseAndReplace(Tests.Stress.template, null, null, null, callback);
+};
+
 Tests.RunAll = function()
 {
     for (var test in Tests) {
@@ -252,3 +307,4 @@ Tests.PrintResults = function () {
     for (var r in Tests.results)
         console.log(Tests.results[r]);
 }
+
