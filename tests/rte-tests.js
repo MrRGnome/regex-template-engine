@@ -4,6 +4,8 @@ var scope = {};
 scope.long = {};
 scope.long.very = {};
 scope.long.very.scopedVar = "Scoped Variable";
+scope.long.very.id = 10;
+scope.long.very.twobind = "unbound";
 scope.long.very.date = Date.now();
 scope.long.very.boundVar = "unbound";
 scope.long.very.unboundVar = "unbound";
@@ -236,12 +238,39 @@ Tests.LoadTemplate.run = function () {
     
 };
 
+//Two Way Binding
+Tests.TwoWayBinding = {};
+Tests.TwoWayBinding.template = "<input id='ID_{{id}}' value='{{twobind.bind}}' />";
+Tests.TwoWayBinding.expectedResult = "bound";
+Tests.TwoWayBinding.expectedResult2 = "rebound";
+Tests.TwoWayBinding.result = "";
+Tests.TwoWayBinding.success = false;
+Tests.TwoWayBinding.processingTime = 0;
+Tests.TwoWayBinding.run = function () {
+    var startTime = Date.now();
+    $(document.getElementsByTagName("body")[0]).append("<div style='display: none;' id='twowayTest'>" + TemplateEngine.ParseAndReplace(Tests.TwoWayBinding.template, null, scope.long.very, "scope.long.very") + "</div");
+    Tests.TwoWayBinding.processingTime = Date.now() - startTime;
+
+    scope.long.very._twobind = "bound";
+    Tests.TwoWayBinding.result = $("#ID_10").val();
+    Tests.TwoWayBinding.success = Tests.TwoWayBinding.expectedResult == Tests.TwoWayBinding.result;
+
+    if (Tests.TwoWayBinding.success)
+    {
+        $("#ID_10").val("rebound");
+        $("#ID_10").change();
+        Tests.TwoWayBinding.result = scope.long.very.twobind;
+        Tests.TwoWayBinding.success = Tests.TwoWayBinding.expectedResult2 == Tests.TwoWayBinding.result;
+    }
+
+    Tests.results.push(Tests.TwoWayBinding.template + " : " + Tests.TwoWayBinding.success + " : " + Tests.TwoWayBinding.processingTime);
+};
+
 //foreach
 Tests.ForeachTemplate = {};
 Tests.ForeachTemplate.template = "{{foreach testArr loadtemplate foreach-template.html at foreachTest}}";
 Tests.ForeachTemplate.expectedResult = "";
-for (var i = 0; i < testArr.length; i++)
-{
+for (var i = 0; i < testArr.length; i++) {
     Tests.ForeachTemplate.expectedResult += "foreach " + testArr[i];
 }
 Tests.ForeachTemplate.result = "";

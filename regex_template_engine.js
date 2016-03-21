@@ -62,6 +62,8 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
         hashCode = TemplateEngine.HashCode(html);
         TemplateEngine.callbackReference[hashCode] = 1;
     }
+    else
+        TemplateEngine.callbackReference[hashCode]++;
 
     if (replaceMatrix) {
         for (var key in replaceMatrix) {
@@ -71,8 +73,80 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
         }
     }
 
+    //Find and replace bound variables (must be done before other variable replacement as there is an overlap in regex values)
+    var findTwoWayBinds = TemplateEngine.settings.BINDING ? /(<input[^>]*{{\s*[^\s]*\s*}}[^>]*>)/gi : /(<input[^>]*{{\s*[^\s]*\.bind\s*}}[^>]*>)/gi;
+    var matchInputs = html.match(findTwoWayBinds);
+    if (matchInputs) {
+        for (var i = 0; i < matchInputs.length; i++){
+            //Get ID and value - everything needs error handling
+            var inputIdArr = matchInputs[i].match(/(?:id=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
+            var inputId = inputIdArr[1];
+            var inputValArr = matchInputs[i].match(/(?:value=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
+            var inputVal = inputValArr[1];
+
+            //Parse Id
+            var parsedId = TemplateEngine.ParseAndReplace(inputId, replaceMatrix, localScope, fullScope, cb, hashCode);
+            
+
+            //Get two way bind variables
+            var foundTemplates = inputVal.match(/{{\s*[^\s]*\s*}}/g);
+
+            if (foundTemplates.length != 1)
+                if (TemplateEngine.settings.DEBUG) console.log("Two way binding will not work correctly with more than one bound variable to an inputs (id: " + inputId + "  value. Either add '.unbind' to the variable suffix or concat the variables into one before templating.");
+
+            var namesArr = TemplateEngine.ClearBraceTags(foundTemplates[0]);
+            if (namesArr.length != 1 && TemplateEngine.settings.DEBUG)
+                console.log("Binding on input with " + foundTemplates[0] + " failed due to spaces in variable name");
+
+            //Parse value
+            var parsedVal = TemplateEngine.GetObjFromString(namesArr[0], localScope);
+
+            //Create binding target
+            var parentScope = TemplateEngine.GetObjFromString(namesArr[0], localScope, true);
+            var lastTerm = TemplateEngine.GetLastPathTerm(namesArr[0], localScope);
+
+            if (parentScope && lastTerm) {
+                var setFunc = function (val) {
+                    if (TemplateEngine.settings.DEBUG) console.log("Searching for two way binding hook: "+this.parsedId+" " + this.fullScope +"."+ this.prop);
+
+                    parentScope[lastTerm] = val;
+                    $("#"+parsedId).val(val);
+                };
+
+                if (TemplateEngine.settings.DEBUG) console.log("Setting up two way binding hook on input " + parsedId + ": " + fullScope + "." + namesArr[0]);
+
+                var boundSetFunc = setFunc.bind({ prop: namesArr[0], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope, parsedId: parsedId});
+
+                //BIND input -> _variable - Set the .change event through JSONP because our ID isn't written necessarily yet
+                html += '<script>' +
+                '$("#' + parsedId + '").change(function() {' +
+                    fullScope + "." + "_" + lastTerm + "=" + '$("#' + parsedId + '").val()' +
+                '});' +
+                '</script>';
+
+                //BIND _variable -> variable, variable -> input
+                parentScope.__defineSetter__("_" + lastTerm, boundSetFunc);
+
+                //replace two way bound template in html so it isn't one way bound later
+                var templateInputRe = new RegExp("(id=)(" + '"' + "|'|&quot;|&#34;|&#39;)(" + inputId + ")(" + '"' + "|'|&quot;|&#34;|&#39;)", "gi")
+                var templatedInput = matchInputs[i].replace(templateInputRe, "$1$2" + parsedId + "$4");
+                templateInputRe = new RegExp("(value=)(" + '"' + "|'|&quot;|&#34;|&#39;)(" + inputVal + ")(" + '"' + "|'|&quot;|&#34;|&#39;)", "gi");
+                templatedInput = templatedInput.replace(templateInputRe, "$1$2" + parsedVal + "$4");
+                templateInputRe = new RegExp(matchInputs[i], "g");
+
+                html = html.replace(templateInputRe, templatedInput);
+
+                if (TemplateEngine.settings.DEBUG) console.log("Two way binding initialized output: " + templatedInput);
+            }
+            else
+                if (TemplateEngine.settings.DEBUG) console.log("Unable to perform two way binding on " + namesArr[0] + ", variable undefined");
+
+            
+        }
+    }
+
     //find and replace variable names
-    var matchNames = html.match(/{{*[^\s}]*}}/g);
+    var matchNames = html.match(/{{\s*[^\s]*\s*}}/g);
     if (matchNames) {
         for (var i = 0; i < matchNames.length; i++) {
             var namesArr = TemplateEngine.ClearBraceTags(matchNames[i]);
@@ -101,13 +175,17 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
                 //add binding hooks
                 if (binding) {
+                    //is template variable only content in DOM element?                      (<[^>]*>[\s]*)({{[^\s]*}})([\s]*<[^>]*>)
+
+
+
                     variableValue = "<span class='binding_hook_" + fullScope + namesArr[n] + "'>" + variableValue + "</span>";
                     var parentScope = TemplateEngine.GetObjFromString(namesArr[n], localScope, true);
                     var lastTerm = TemplateEngine.GetLastPathTerm(namesArr[n], localScope);
 
                     if (parentScope && lastTerm) {
                         var setFunc = function (val) {
-                            if (TemplateEngine.settings.DEBUG) console.log("Searching for binding hook: binding_hook_" + fullScope + this.prop);
+                            if (TemplateEngine.settings.DEBUG) console.log("Searching for one way binding hook: binding_hook_" + fullScope + this.prop);
 
                             var elements = document.getElementsByClassName("binding_hook_" + fullScope + this.prop);
                             for (var index = 0; index < elements.length; index++) {
@@ -116,7 +194,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                             parentScope[lastTerm] = val;
                         };
 
-                        if (TemplateEngine.settings.DEBUG) console.log("Setting up binding hook on: " + JSON.stringify(parentScope));
+                        if (TemplateEngine.settings.DEBUG) console.log("Setting up one way binding hook on: " + JSON.stringify(parentScope));
 
                         var boundSetFunc = setFunc.bind({ prop: namesArr[n], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope });
 
@@ -125,7 +203,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
                     }
                     else
-                        if (TemplateEngine.settings.DEBUG) console.log("Unable to perform binding, variable undefined");
+                        if (TemplateEngine.settings.DEBUG) console.log("Unable to perform one way binding on " + matchNames[i] + ", variable undefined");
 
                 }
 
@@ -173,7 +251,9 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                         $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, scope, this.arrPath + "[" + x + "]."));
                     }
                     
-                    TemplateEngine.AttemptCallback(this.hash, [this.cb, this.instanceCallback]);
+                    TemplateEngine.AttemptCallback(this.hash, [this.cb]);
+                    if (this.instanceCallback)
+                        this.instanceCallback();
 
                     $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
                     return true;
@@ -232,7 +312,9 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + divId);
                 $(document.getElementById(divId)).html(TemplateEngine.ParseAndReplace(ret, {}, scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
                 $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
-                TemplateEngine.AttemptCallback(this.hash, [this.cb, this.instanceCallback]);
+                TemplateEngine.AttemptCallback(this.hash, [this.cb]);
+                if (this.instanceCallback)
+                    this.instanceCallback();
             };
 
             var boundCallback = callback.bind({ cb: cb, instanceCallback: instanceCallback, hash: hashCode });
@@ -304,25 +386,19 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
 
     //Do all pre-object serach template parsing
 
-    //Avoid digging through path if already parsed down
-    if (getLocalScope) {
-        if (objectPath.length == 1)
-            return localScope;
-    }
-
-    //Remove binding
-    objectPath = objectPath.replace(/\.bind/g, "");
-    objectPath = objectPath.replace(/\.unbind/g, "");
+    //Remove binding - todo stop truncating of var names with keywords in them
+    objectPath = objectPath.replace(/(\.bind)(\s|\.|$)+/g, "$2");
+    objectPath = objectPath.replace(/(\.unbind)(\s|\.|$)+/g, "$2");
 
     var json = false;
     if (objectPath.match(/\.json/)) {
         json = true;
-        objectPath = objectPath.replace(/\.json/g, "");
+        objectPath = objectPath.replace(/(\.json)(\s|\.|$)+/g, "$2");
     }
 
     //I don't need this.
     if (objectPath.match("this")) {
-        objectPath = objectPath.replace(/this\./g, "");
+        objectPath = objectPath.replace(/(\s|^)+(this\.)/g, "$1");
         if (objectPath == "this")
             return localScope;
     }
@@ -330,28 +406,34 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
 
     var todate = false;
     var local = false;
-    if (objectPath.match(/\.todate/)) {
+    if (objectPath.match(/(\.todate)(\s|\.|$)+/)) {
         todate = true;
-        objectPath = objectPath.replace(/\.todate/g, "");
+        objectPath = objectPath.replace(/(\.todate)(\s|\.|$)+/g, "$2");
 
         if (objectPath.match(/\.local/)) {
             local = true;
-            objectPath = objectPath.replace(/\.local/g, "");
+            objectPath = objectPath.replace(/(\.local)(\s|\.|$)+/g, "$2");
         }
     }
 
     var replaceWhite = false;
     var replaceWith = "";
-    if (objectPath.match(/\.replace-whitespace/)) {
+    if (objectPath.match(/\.replace-whitespace\./)) {
         replaceWhite = true;
         var re = new RegExp("(?:\.replace-whitespace\.)(.[^.\n]*)", "g");
         replaceWith = re.exec(objectPath)[1];
         objectPath = objectPath.replace(/\.replace-whitespace\..[^.\n]*/g, "");
     }
 
+    
+    //Avoid digging through path if already parsed down
+    objectPath = objectPath.split(".");
+    if (getLocalScope) {
+        if (objectPath.length == 1)
+            return localScope;
+    }
 
     //Start object search
-    objectPath = objectPath.split(".");
     var foundVariable;
     var n = 0;
     var tmp = localScope;
@@ -406,8 +488,8 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
 //ClearBraceTags is a function designed to remove curly braces from the outside of a string so the contents may be cleanly parsed
 TemplateEngine.ClearBraceTags = function (arr) {
 
-    arr = arr.toString().replace(/{{/g, "");
-    arr = arr.replace(/}}/g, "");
+    arr = arr.toString().replace(/{{\s*/g, "");
+    arr = arr.replace(/\s*}}/g, "");
     return arr.split(" ");
 };
 
