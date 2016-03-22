@@ -6,6 +6,7 @@ scope.long.very = {};
 scope.long.very.scopedVar = "Scoped Variable";
 scope.long.very.id = 10;
 scope.long.very.twobind = "unbound";
+scope.long.very.checked = false;
 scope.long.very.date = Date.now();
 scope.long.very.boundVar = "unbound";
 scope.long.very.unboundVar = "unbound";
@@ -238,7 +239,7 @@ Tests.LoadTemplate.run = function () {
     
 };
 
-//Two Way Binding
+//Two Way Binding - text
 Tests.TwoWayBinding = {};
 Tests.TwoWayBinding.template = "<input id='ID_{{id}}' value='{{twobind.bind}}' />";
 Tests.TwoWayBinding.expectedResult = "bound";
@@ -248,7 +249,7 @@ Tests.TwoWayBinding.success = false;
 Tests.TwoWayBinding.processingTime = 0;
 Tests.TwoWayBinding.run = function () {
     var startTime = Date.now();
-    $(document.getElementsByTagName("body")[0]).append("<div style='display: none;' id='twowayTest'>" + TemplateEngine.ParseAndReplace(Tests.TwoWayBinding.template, null, scope.long.very, "scope.long.very") + "</div");
+    $(document.getElementsByTagName("body")[0]).append("<div style='display: none;' id='twowayTest-text'>" + TemplateEngine.ParseAndReplace(Tests.TwoWayBinding.template, null, scope.long.very, "scope.long.very.") + "</div");
     Tests.TwoWayBinding.processingTime = Date.now() - startTime;
 
     scope.long.very._twobind = "bound";
@@ -264,6 +265,33 @@ Tests.TwoWayBinding.run = function () {
     }
 
     Tests.results.push(Tests.TwoWayBinding.template + " : " + Tests.TwoWayBinding.success + " : " + Tests.TwoWayBinding.processingTime);
+};
+
+//Two Way Binding - checkbox
+Tests.TwoWayCheckbox = {};
+Tests.TwoWayCheckbox.template = "<input id='twoway-checkbox' type='checkbox' value='{{twobind.bind}}' checked='{{checked}}' />";
+Tests.TwoWayCheckbox.expectedResult = true;
+Tests.TwoWayCheckbox.expectedResult2 = false;
+Tests.TwoWayCheckbox.result = "";
+Tests.TwoWayCheckbox.success = false;
+Tests.TwoWayCheckbox.processingTime = 0;
+Tests.TwoWayCheckbox.run = function () {
+    var startTime = Date.now();
+    $(document.getElementsByTagName("body")[0]).append("<div style='display: none;'>" + TemplateEngine.ParseAndReplace(Tests.TwoWayCheckbox.template, null, scope.long.very, "scope.long.very.") + "</div");
+    Tests.TwoWayCheckbox.processingTime = Date.now() - startTime;
+
+    scope.long.very._checked = true;
+    Tests.TwoWayCheckbox.result = $("#twoway-checkbox").prop("checked");
+    Tests.TwoWayCheckbox.success = Tests.TwoWayCheckbox.expectedResult == Tests.TwoWayCheckbox.result;
+
+    if (Tests.TwoWayCheckbox.success) {
+        $("#twoway-checkbox").prop("checked", false);
+        $("#twoway-checkbox").change();
+        Tests.TwoWayCheckbox.result = scope.long.very.checked;
+        Tests.TwoWayCheckbox.success = Tests.TwoWayCheckbox.expectedResult2 == Tests.TwoWayCheckbox.result;
+    }
+
+    Tests.results.push(Tests.TwoWayCheckbox.template + " : " + Tests.TwoWayCheckbox.success + " : " + Tests.TwoWayCheckbox.processingTime);
 };
 
 //foreach
@@ -294,7 +322,7 @@ Tests.ForeachTemplate.run = function () {
 
 //Stress test
 Tests.Stress = {};
-Tests.Stress.intensity = 1;
+Tests.Stress.intensity = 1000;
 Tests.Stress.template = Tests.Utilities.Repeat("{{foreach testArr loadtemplate foreach-template.html at stressTest}}", Tests.Stress.intensity);
 Tests.Stress.expectedResult = "";
 for (var i = 0; i < testArr.length; i++) {
@@ -312,7 +340,7 @@ Tests.Stress.run = function () {
 
     var callback = function () {
         Tests.Stress.processingTime = Date.now() - this.startTime;
-        console.log("done stress test, time:" + Tests.Stress.processingTime);
+        if(TemplateEngine.settings.DEBUG) console.log("done stress test, time:" + Tests.Stress.processingTime);
         Tests.Stress.result = document.getElementById("stressTest").innerHTML;
         Tests.Stress.success = Tests.Stress.expectedResult == Tests.Stress.result;
         Tests.results.push(Tests.Stress.template + " : " + Tests.Stress.success + " : " + Tests.Stress.processingTime);

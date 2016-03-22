@@ -77,12 +77,36 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     var findTwoWayBinds = TemplateEngine.settings.BINDING ? /(<input[^>]*{{\s*[^\s]*\s*}}[^>]*>)/gi : /(<input[^>]*{{\s*[^\s]*\.bind\s*}}[^>]*>)/gi;
     var matchInputs = html.match(findTwoWayBinds);
     if (matchInputs) {
-        for (var i = 0; i < matchInputs.length; i++){
+        for (var i = 0; i < matchInputs.length; i++) {
             //Get ID and value - everything needs error handling
             var inputIdArr = matchInputs[i].match(/(?:id=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
+            if (!inputIdArr) {
+                if (TemplateEngine.settings.DEBUG) console.log("No ID found on input which includes bindings, please make sure your inputs have an ID attribute.");
+                return;
+            }
             var inputId = inputIdArr[1];
+
             var inputValArr = matchInputs[i].match(/(?:value=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
-            var inputVal = inputValArr[1];
+            
+
+            var inputTypeArr = matchInputs[i].match(/(?:type=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
+            var inputType = inputTypeArr ? inputTypeArr[1] : null;
+            
+            var inputVal = "";
+            var attribute = "value";
+            if (inputType && inputType.match(/radio|checkbox/g)) {
+                attribute = "checked";
+                inputVal = matchInputs[i].match(/(?:checked=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i)[1];
+            }
+            else {
+                if (!inputValArr) {
+                    if (TemplateEngine.settings.DEBUG) console.log("No value found on input which includes bindings, please make sure your inputs have a value attribute.");
+                    return;
+                }
+                inputVal = inputValArr[1];
+            }
+               
+
 
             //Parse Id
             var parsedId = TemplateEngine.ParseAndReplace(inputId, replaceMatrix, localScope, fullScope, cb, hashCode);
@@ -107,21 +131,22 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
             if (parentScope && lastTerm) {
                 var setFunc = function (val) {
-                    if (TemplateEngine.settings.DEBUG) console.log("Searching for two way binding hook: "+this.parsedId+" " + this.fullScope +"."+ this.prop);
+                    if (TemplateEngine.settings.DEBUG) console.log("Searching for two way binding hook: "+this.parsedId+" " + this.fullScope + this.prop);
 
                     parentScope[lastTerm] = val;
-                    $("#"+parsedId).val(val);
+                    $("#"+parsedId).prop(this.attribute, val);
                 };
 
-                if (TemplateEngine.settings.DEBUG) console.log("Setting up two way binding hook on input " + parsedId + ": " + fullScope + "." + namesArr[0]);
+                if (TemplateEngine.settings.DEBUG) console.log("Setting up two way binding hook on input " + parsedId + ": " + fullScope + namesArr[0]);
 
-                var boundSetFunc = setFunc.bind({ prop: namesArr[0], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope, parsedId: parsedId});
+                var boundSetFunc = setFunc.bind({ prop: namesArr[0], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope, parsedId: parsedId, attribute: attribute});
 
                 //BIND input -> _variable - Set the .change event through JSONP because our ID isn't written necessarily yet
                 html += '<script>' +
                 '$("#' + parsedId + '").change(function() {' +
-                    fullScope + "." + "_" + lastTerm + "=" + '$("#' + parsedId + '").val()' +
+                    fullScope + "_" + lastTerm + "=" + '$("#' + parsedId + '").val()' +
                 '});' +
+                '$("#' + parsedId + '").addClass("tw_binding_hook_' + fullScope + namesArr[0] + '");' +
                 '</script>';
 
                 //BIND _variable -> variable, variable -> input
@@ -130,7 +155,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 //replace two way bound template in html so it isn't one way bound later
                 var templateInputRe = new RegExp("(id=)(" + '"' + "|'|&quot;|&#34;|&#39;)(" + inputId + ")(" + '"' + "|'|&quot;|&#34;|&#39;)", "gi")
                 var templatedInput = matchInputs[i].replace(templateInputRe, "$1$2" + parsedId + "$4");
-                templateInputRe = new RegExp("(value=)(" + '"' + "|'|&quot;|&#34;|&#39;)(" + inputVal + ")(" + '"' + "|'|&quot;|&#34;|&#39;)", "gi");
+                templateInputRe = new RegExp("(" + attribute + "=)(" + '"' + "|'|&quot;|&#34;|&#39;)(" + inputVal + ")(" + '"' + "|'|&quot;|&#34;|&#39;)", "gi");
                 templatedInput = templatedInput.replace(templateInputRe, "$1$2" + parsedVal + "$4");
                 templateInputRe = new RegExp(matchInputs[i], "g");
 
@@ -173,11 +198,8 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                     if (TemplateEngine.settings.DEBUG) console.log("setting value " + namesArr[n] + " = " + variableValue);
                 }
 
-                //add binding hooks
+                //add one way binding hooks
                 if (binding) {
-                    //is template variable only content in DOM element?                      (<[^>]*>[\s]*)({{[^\s]*}})([\s]*<[^>]*>)
-
-
 
                     variableValue = "<span class='binding_hook_" + fullScope + namesArr[n] + "'>" + variableValue + "</span>";
                     var parentScope = TemplateEngine.GetObjFromString(namesArr[n], localScope, true);
