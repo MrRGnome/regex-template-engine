@@ -216,7 +216,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                             parentScope[lastTerm] = val;
                         };
 
-                        if (TemplateEngine.settings.DEBUG) console.log("Setting up one way binding hook on: " + JSON.stringify(parentScope));
+                        if (TemplateEngine.settings.DEBUG) console.log("Setting up one way binding hook on: " + fullScope + namesArr[n]);
 
                         var boundSetFunc = setFunc.bind({ prop: namesArr[n], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope });
 
