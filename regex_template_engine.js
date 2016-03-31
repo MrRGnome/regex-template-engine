@@ -27,7 +27,8 @@ TemplateEngine.callbackReference = {};
 //Template Engine start point
 TemplateEngine.Start = function () {
     if (TemplateEngine.settings.AUTOLOAD)
-        $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));
+        $(document.getElementsByTagName("head")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("head")[0]).html()));
+    $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));
 };
 
 document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
@@ -45,7 +46,7 @@ document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
 //{{foreach iterableVariable loadtemplate template.html at htmlElementId}} - loads a template and iterates over an object or array. The template is loaded as many times as the iterableVariable is iterable, with theiterableVariable being passed as the local context for another round of ParsAndReplace on the loaded template.
 
 //ParseAndreplace also accepts a replaceMatrix which can be used to define for more sohpisticated templating needs. In the example below the html {{email_subscription}} is replaced by the word "CHECKED" which checks a checkbox if the user is subscribed to email newsletters.
-// $("#userProfileBody").html(ParseAndReplace(sessionStorage["userProfileBody.html"], {
+// $("#userProfileBody").html(ParseAndReplace("<input type='checkbox' {{email_subscription}}>", {
 //"{{email_subscrption}}": user.preferences.email_subscription ? "CHECKED" : ""
 //}));
 
@@ -57,8 +58,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
         localScope = window;
 
     //setup callback tracker so I know when we're done
-    if (!hashCode)
-    {
+    if (!hashCode) {
         hashCode = TemplateEngine.HashCode(html);
         TemplateEngine.callbackReference[hashCode] = 1;
     }
@@ -87,11 +87,11 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var inputId = inputIdArr[1];
 
             var inputValArr = matchInputs[i].match(/(?:value=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
-            
+
 
             var inputTypeArr = matchInputs[i].match(/(?:type=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
             var inputType = inputTypeArr ? inputTypeArr[1] : null;
-            
+
             var inputVal = "";
             var attribute = "value";
             if (inputType && inputType.match(/radio|checkbox/g)) {
@@ -105,12 +105,12 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                 }
                 inputVal = inputValArr[1];
             }
-               
+
 
 
             //Parse Id
             var parsedId = TemplateEngine.ParseAndReplace(inputId, replaceMatrix, localScope, fullScope, cb, hashCode);
-            
+
 
             //Get two way bind variables
             var foundTemplates = inputVal.match(/{{\s*[^\s]*\s*}}/g);
@@ -131,15 +131,15 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
             if (parentScope && lastTerm) {
                 var setFunc = function (val) {
-                    if (TemplateEngine.settings.DEBUG) console.log("Searching for two way binding hook: "+this.parsedId+" " + this.fullScope + this.prop);
+                    if (TemplateEngine.settings.DEBUG) console.log("Searching for two way binding hook: " + this.parsedId + " " + this.fullScope + this.prop);
 
                     parentScope[lastTerm] = val;
-                    $("#"+parsedId).prop(this.attribute, val);
+                    $("#" + parsedId).prop(this.attribute, val);
                 };
 
                 if (TemplateEngine.settings.DEBUG) console.log("Setting up two way binding hook on input " + parsedId + ": " + fullScope + namesArr[0]);
 
-                var boundSetFunc = setFunc.bind({ prop: namesArr[0], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope, parsedId: parsedId, attribute: attribute});
+                var boundSetFunc = setFunc.bind({ prop: namesArr[0], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope, parsedId: parsedId, attribute: attribute });
 
                 //BIND input -> _variable - Set the .change event through JSONP because our ID isn't written necessarily yet
                 html += '<script>' +
@@ -166,7 +166,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             else
                 if (TemplateEngine.settings.DEBUG) console.log("Unable to perform two way binding on " + namesArr[0] + ", variable undefined");
 
-            
+
         }
     }
 
@@ -236,11 +236,11 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
     }
 
-    
+
     //find foreach
     var match = html.match(/{{foreach.[^}}]*}}/g);
     if (match) {
-        
+
         for (var i = 0; i < match.length; i++) {
 
             if (TemplateEngine.settings.DEBUG) console.log("Executing: " + match[i]);
@@ -259,20 +259,20 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var preCallback = matchArr.indexOf("callback");
             var instanceCallback = preCallback != -1 ? TemplateEngine.GetObjFromString(matchArr[preCallback + 1], localScope) : null;
             var divId = matchArr[preDivIndex + 1];
-            var definedLocalScope = preLocalScope != -1 ? TemplateEngine.GetObjFromString(matchArr[preLocalScope  + 1], localScope) : null;
+            var definedLocalScope = preLocalScope != -1 ? TemplateEngine.GetObjFromString(matchArr[preLocalScope + 1], localScope) : null;
 
 
             if (loadtemplate != -1 && preDivIndex != -1) {
                 var templateName = matchArr[loadtemplate + 1];
                 //Do template binding
                 var callback = function (ret, divId) {
-                    
+
                     //foreach through template
-                    for (var x = 0; x < foreachArr.length; x++) {
+                    for (var x = 0, l = this.foreachArr.length; x < l; x++) {
                         var scope = this.definedLocalScope ? this.definedLocalScope : this.foreachArr[x]
                         $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, scope, this.arrPath + "[" + x + "]."));
                     }
-                    
+
                     TemplateEngine.AttemptCallback(this.hash, [this.cb]);
                     if (this.instanceCallback)
                         this.instanceCallback();
@@ -281,8 +281,8 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
                     return true;
                 };
 
-                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr, cb: cb , definedLocalScope: definedLocalScope, instanceCallback: instanceCallback, hash: hashCode});
-                
+                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr, cb: cb, definedLocalScope: definedLocalScope, instanceCallback: instanceCallback, hash: hashCode });
+
 
                 //Add callback reference so we know when everyone is done working
                 TemplateEngine.callbackReference[hashCode]++;
@@ -304,7 +304,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     //find loadtemplate
     match = html.match(/{{loadtemplate.[^}}]*}}/g);
     if (match) {
-        
+
         for (var x = 0; x < match.length; x++) {
 
             if (TemplateEngine.settings.DEBUG) console.log("Executing " + match[x]);
@@ -332,14 +332,14 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
             var callback = function (ret, divId) {
                 if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + divId);
-                $(document.getElementById(divId)).html(TemplateEngine.ParseAndReplace(ret, {}, scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
+                $(document.getElementById(divId)).html(TemplateEngine.ParseAndReplace(ret, {}, this.scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
                 $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
                 TemplateEngine.AttemptCallback(this.hash, [this.cb]);
                 if (this.instanceCallback)
                     this.instanceCallback();
             };
 
-            var boundCallback = callback.bind({ cb: cb, instanceCallback: instanceCallback, hash: hashCode });
+            var boundCallback = callback.bind({ cb: cb, instanceCallback: instanceCallback, hash: hashCode, scopeVariable: scopeVariable });
             //Add callback reference so we know when everyone is done working
             TemplateEngine.callbackReference[hashCode]++;
 
@@ -361,24 +361,21 @@ TemplateEngine.LoadTemplate = function (filename, callback, divId) {
         fileDir = TemplateEngine.settings.VIEWS_FOLDER + "/";
     }
 
-    if(TemplateEngine.settings.ANTI_XHR_CACHING)
-    {
-        if (sessionStorage[filename])
-        {
+    if (TemplateEngine.settings.ANTI_XHR_CACHING) {
+        if (sessionStorage[filename]) {
             callback(sessionStorage[filename], divId);
             return;
         }
 
-        if (TemplateEngine.activeRequests[filename])
-        {
+        if (TemplateEngine.activeRequests[filename]) {
             TemplateEngine.activeRequests[filename].push({ callback: callback, divId: divId });
             return;
         }
-            
+
         TemplateEngine.activeRequests[filename] = [];
     }
 
-    
+
 
 
     var r = new XMLHttpRequest();
@@ -386,14 +383,13 @@ TemplateEngine.LoadTemplate = function (filename, callback, divId) {
     r.onreadystatechange = function () {
         if (r.readyState != 4 || r.status != 200)
             return;
-        if (TemplateEngine.settings.ANTI_XHR_CACHING)
-        {
+        if (TemplateEngine.settings.ANTI_XHR_CACHING) {
             sessionStorage[filename] = r.responseText;
             for (var i in TemplateEngine.activeRequests[filename])
                 TemplateEngine.activeRequests[filename][i].callback(r.responseText, TemplateEngine.activeRequests[filename][i].divId);
             TemplateEngine.activeRequests[filename] = null;
         }
-            
+
         callback(r.responseText, divId);
     };
     r.send(null);
@@ -424,7 +420,7 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
         if (objectPath == "this")
             return localScope;
     }
-        
+
 
     var todate = false;
     var local = false;
@@ -447,7 +443,7 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
         objectPath = objectPath.replace(/\.replace-whitespace\..[^.\n]*/g, "");
     }
 
-    
+
     //Avoid digging through path if already parsed down
     objectPath = objectPath.split(".");
     if (getLocalScope) {
@@ -523,9 +519,9 @@ TemplateEngine.GetLastPathTerm = function (objectPath, localScope) {
         objectPath = objectPath.slice(0, objectPath.length - 1);
     if (objectPath.length == 0)
         return localScope;
-    else 
+    else
         return objectPath[objectPath.length - 1];
-    
+
 };
 
 TemplateEngine.HashCode = function (str) {
@@ -543,7 +539,7 @@ TemplateEngine.AttemptCallback = function (hash, cbArray) {
     if (TemplateEngine.callbackReference[hash] && TemplateEngine.callbackReference[hash] <= 1) {
         TemplateEngine.callbackReference[hash] = null;
         for (var i in cbArray)
-            if(cbArray[i])
+            if (cbArray[i])
                 cbArray[i]();
     }
     else if (TemplateEngine.callbackReference[hash])

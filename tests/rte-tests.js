@@ -1,7 +1,10 @@
 if (!Tests)
     var Tests = {};
 
+
 Tests.results = [];
+
+
 
 Tests.RunAll = function()
 {

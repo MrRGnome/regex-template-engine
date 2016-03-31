@@ -4,7 +4,7 @@
 Tests.TemplateTests = {};
 var testArr = Tests.Utilities.MakeArray(10);
 
-//loadtemplate
+//load template
 Tests.TemplateTests.LoadTemplate = {};
 Tests.TemplateTests.LoadTemplate.template = "{{loadtemplate test-template.html at loadtemplateTest}}";
 Tests.TemplateTests.LoadTemplate.expectedResult = "Template Loaded " + globalScopeVar;
@@ -28,6 +28,40 @@ Tests.TemplateTests.LoadTemplate.run = function () {
 
 
 };
+
+//complex loadtemplate
+/*
+Tests.TemplateTests.LoadComplexTemplate = {};
+Tests.TemplateTests.LoadComplexTemplate.intensity = 3;
+Tests.TemplateTests.LoadComplexTemplate.template = "{{loadtemplate complex-template.html at loadcomplextemplateTest}}";
+Tests.TemplateTests.LoadComplexTemplate.expectedResult = "";
+Tests.TemplateTests.LoadComplexTemplate.result = "";
+Tests.TemplateTests.LoadComplexTemplate.success = false;
+Tests.TemplateTests.LoadComplexTemplate.processingTime = 0;
+Tests.TemplateTests.LoadComplexTemplate.run = function () {
+    
+    sessionStorage['complex-template'] = "";
+    for (var t in Tests.VariableTests)
+    {
+        sessionStorage['complex-template'] += Tests.Utilities.Repeate(Tests.VariableTests[t].template, Tests.TemplateTests.LoadComplexTemplate.intensity);
+    }
+    TemplateEngine.settings.ANTI_XHR_CACHING = true;
+    //in order to make this work I am going to have to add a "actions" and "reset" method on objects which require thema nd trigger them as needed, including in this expected template
+
+    $(document.getElementsByTagName("body")[0]).append("<div style='display: none;' id='loadcomplextemplateTest'></div>");
+    var startTime = Date.now();
+    var callback = function () {
+        Tests.TemplateTests.LoadComplexTemplate.processingTime = Date.now() - this.startTime;
+        Tests.TemplateTests.LoadComplexTemplate.result = document.getElementById("loadcomplextemplateTest").innerHTML;
+        Tests.TemplateTests.LoadComplexTemplate.success = Tests.TemplateTests.LoadComplexTemplate.expectedResult == Tests.TemplateTests.LoadComplexTemplate.result;
+        Tests.results.push(Tests.TemplateTests.LoadComplexTemplate.template + " : " + Tests.TemplateTests.LoadComplexTemplate.success + " : " + Tests.TemplateTests.LoadComplexTemplate.processingTime);
+    }
+    callback = callback.bind({ "startTime": startTime });
+
+    TemplateEngine.ParseAndReplace(Tests.TemplateTests.LoadComplexTemplate.template, null, null, null, callback);
+
+
+};*/
 
 //foreach
 Tests.TemplateTests.ForeachTemplate = {};
@@ -54,6 +88,8 @@ Tests.TemplateTests.ForeachTemplate.run = function () {
 
     TemplateEngine.ParseAndReplace(Tests.TemplateTests.ForeachTemplate.template, null, null, null, callback);
 };
+
+
 
 //Stress test
 Tests.TemplateTests.Stress = {};
