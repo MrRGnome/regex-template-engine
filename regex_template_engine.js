@@ -8,7 +8,7 @@ TemplateEngine.settings.VIEWS_FOLDER = "/views";
 TemplateEngine.settings.HIDDEN_CLASS = "hidden";
 
 //Auto parse document
-TemplateEngine.settings.AUTOLOAD = true;
+TemplateEngine.settings.AUTOLOAD = false;
 
 //Enable one-way binding where changes to the javascript variable are reflected to the HTML template (Alpha feature, may experience bugs. Disabled by default)
 TemplateEngine.settings.BINDING = false;
@@ -20,15 +20,14 @@ TemplateEngine.settings.ANTI_XHR_CACHING = false;
 TemplateEngine.activeRequests = {};
 
 TemplateEngine.callbackReference = {};
-
-
-
+TemplateEngine.callbackStack = {};
 
 //Template Engine start point
-TemplateEngine.Start = function () {
-    if (TemplateEngine.settings.AUTOLOAD)
-        $(document.getElementsByTagName("head")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("head")[0]).html()));
-    $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));
+TemplateEngine.Start = function (e, force) {
+    if (TemplateEngine.settings.AUTOLOAD || force) {
+        $(document.getElementsByTagName("title")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("title")[0]).html()));
+        $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));
+    }
 };
 
 document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
@@ -60,7 +59,16 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     //setup callback tracker so I know when we're done
     if (!hashCode) {
         hashCode = TemplateEngine.HashCode(html);
-        TemplateEngine.callbackReference[hashCode] = 1;
+        if (TemplateEngine.callbackReference[hashCode])
+            TemplateEngine.callbackReference[hashCode]++;
+        else
+            TemplateEngine.callbackReference[hashCode] = 1;
+
+        if (TemplateEngine.callbackStack[hashCode] && cb)
+            TemplateEngine.callbackStack[hashCode].push(cb);
+        else if (!TemplateEngine.callbackStack[hashCode])
+            TemplateEngine.callbackStack[hashCode] = cb ? [cb] : [];
+
     }
     else
         TemplateEngine.callbackReference[hashCode]++;
@@ -250,7 +258,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
 
             //Get foreach object
             var foreachArr = TemplateEngine.GetObjFromString(matchArr[1], localScope);
-            if (TemplateEngine.settings.DEBUG) console.log("foreach length: " + foreachArr.length);
+            if (TemplateEngine.settings.DEBUG) console.log(matchArr[1] + " length: " + foreachArr.length);
 
             //look for keywords
             var loadtemplate = matchArr.indexOf("loadtemplate");
@@ -259,29 +267,35 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var preCallback = matchArr.indexOf("callback");
             var instanceCallback = preCallback != -1 ? TemplateEngine.GetObjFromString(matchArr[preCallback + 1], localScope) : null;
             var divId = matchArr[preDivIndex + 1];
-            var definedLocalScope = preLocalScope != -1 ? TemplateEngine.GetObjFromString(matchArr[preLocalScope + 1], localScope) : null;
-
+            var scopeVariable = preLocalScope != -1 ? TemplateEngine.GetObjFromString(matchArr[preLocalScope + 1], localScope) : null;
 
             if (loadtemplate != -1 && preDivIndex != -1) {
                 var templateName = matchArr[loadtemplate + 1];
                 //Do template binding
                 var callback = function (ret, divId) {
 
-                    //foreach through template
-                    for (var x = 0, l = this.foreachArr.length; x < l; x++) {
-                        var scope = this.definedLocalScope ? this.definedLocalScope : this.foreachArr[x]
-                        $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, scope, this.arrPath + "[" + x + "]."));
+                    var finalcb = function () {
+                        //foreach through template
+                        for (var x = 0, l = this.foreachArr.length; x < l; x++) {
+                            var scope = this.scopeVariable ? this.scopeVariable : this.foreachArr[x];
+                            $(document.getElementById(this.divId)).append(TemplateEngine.ParseAndReplace(this.ret, {}, scope, this.arrPath + "[" + x + "]."));
+                        }
+                        $(document.getElementById(this.divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
                     }
 
-                    TemplateEngine.AttemptCallback(this.hash, [this.cb]);
-                    if (this.instanceCallback)
-                        this.instanceCallback();
+                    if (this.instanceCallback) {
+                        var bicb = this.instanceCallback.bind({ ret: ret, divId: divId, arrPath: this.arrPath, foreachArr: this.foreachArr, scopeVariable: this.scopeVariable, hash: this.hash });
+                        TemplateEngine.callbackStack[this.hash].unshift(bicb);
+                    }
 
-                    $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
+                    var bfinalcb = finalcb.bind({ ret: ret, divId: divId, arrPath: this.arrPath, foreachArr: this.foreachArr, scopeVariable: this.scopeVariable, hash: this.hash });
+                    TemplateEngine.callbackStack[this.hash].unshift(bfinalcb);
+
+                    TemplateEngine.AttemptCallback(this.hash);
                     return true;
                 };
 
-                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr, cb: cb, definedLocalScope: definedLocalScope, instanceCallback: instanceCallback, hash: hashCode });
+                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr, scopeVariable: scopeVariable, hash: hashCode, instanceCallback: instanceCallback });
 
 
                 //Add callback reference so we know when everyone is done working
@@ -316,7 +330,8 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var divId = matchArr[preDivIndex + 1];
             var withIndex = matchArr.indexOf("with");
             var varName = matchArr[withIndex + 1];
-
+            var preCallback = matchArr.indexOf("callback");
+            var instanceCallback = preCallback != -1 ? TemplateEngine.GetObjFromString(matchArr[preCallback + 1], localScope) : null;
 
             if (preDivIndex == -1) {
                 if (TemplateEngine.settings.DEBUG) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
@@ -331,15 +346,25 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
             var scopeVariable = localScope ? TemplateEngine.GetObjFromString(varName, localScope) : TemplateEngine.GetObjFromString(varName);
 
             var callback = function (ret, divId) {
-                if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + divId);
-                $(document.getElementById(divId)).html(TemplateEngine.ParseAndReplace(ret, {}, this.scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
-                $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
-                TemplateEngine.AttemptCallback(this.hash, [this.cb]);
-                if (this.instanceCallback)
-                    this.instanceCallback();
+
+                var finalcb = function () {
+                    if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + this.divId);
+                    $(document.getElementById(this.divId)).html(TemplateEngine.ParseAndReplace(this.ret, {}, this.scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
+                    $(document.getElementById(this.divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
+                }
+
+                if (this.instanceCallback) {
+                    var bicb = this.instanceCallback.bind({ ret: ret, divId: divId, scopeVariable: this.scopeVariable, hash: this.hash });
+                    TemplateEngine.callbackStack[this.hash].unshift(bicb);
+                }
+
+                var bfinalcb = finalcb.bind({ ret: ret, divId: divId, scopeVariable: this.scopeVariable, hash: this.hash });
+                TemplateEngine.callbackStack[this.hash].unshift(bfinalcb);
+
+                TemplateEngine.AttemptCallback(this.hash);
             };
 
-            var boundCallback = callback.bind({ cb: cb, instanceCallback: instanceCallback, hash: hashCode, scopeVariable: scopeVariable });
+            var boundCallback = callback.bind({ hash: hashCode, scopeVariable: scopeVariable, instanceCallback: instanceCallback });
             //Add callback reference so we know when everyone is done working
             TemplateEngine.callbackReference[hashCode]++;
 
@@ -347,7 +372,7 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
         }
     }
 
-    TemplateEngine.AttemptCallback(hashCode, [cb]);
+    TemplateEngine.AttemptCallback(hashCode, true);
 
     return html;
 };
@@ -535,12 +560,18 @@ TemplateEngine.HashCode = function (str) {
     return hash;
 };
 
-TemplateEngine.AttemptCallback = function (hash, cbArray) {
-    if (TemplateEngine.callbackReference[hash] && TemplateEngine.callbackReference[hash] <= 1) {
+TemplateEngine.AttemptCallback = function (hash, timeout) {
+    if (TemplateEngine.callbackReference[hash] && TemplateEngine.callbackReference[hash] <= 1 && TemplateEngine.callbackStack[hash]) {
         TemplateEngine.callbackReference[hash] = null;
-        for (var i in cbArray)
-            if (cbArray[i])
-                cbArray[i]();
+        if (timeout) {
+            setTimeout(function () {
+                for (var i in TemplateEngine.callbackStack[hash])
+                    TemplateEngine.callbackStack[hash][i]();
+            }, 0);
+            return;
+        }
+        for (var i in TemplateEngine.callbackStack[hash])
+            TemplateEngine.callbackStack[hash][i]();
     }
     else if (TemplateEngine.callbackReference[hash])
         TemplateEngine.callbackReference[hash]--;
