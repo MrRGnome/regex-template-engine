@@ -111,7 +111,7 @@ Tests.VariableTests.BindVar.run = function () {
 
         setTimeout(function () {
             scope.long.very._boundVar = "bound";
-            Tests.VariableTests.BindVar.result = document.getElementsByClassName("binding_hook_scope.long.very.boundVar.bind")[0].innerHTML;
+            Tests.VariableTests.BindVar.result = document.getElementsByClassName("binding_hook_scope.long.very.boundVar")[0].innerHTML;
             Tests.VariableTests.BindVar.success = Tests.VariableTests.BindVar.expectedResult == Tests.VariableTests.BindVar.result;
             Tests.results.push(Tests.VariableTests.BindVar.template + " : " + Tests.VariableTests.BindVar.success + " : " + Tests.VariableTests.BindVar.processingTime);
         }, 100);
