@@ -90,64 +90,10 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
     
 
     //find foreach
-    var match = html.replace(/{{(foreach[^}]+?)}}/g, TemplateEngine.Foreach.bind({ localScope: localScope, hashCode: hashCode }));
+    html = html.replace(/{{\s*?(foreach[^}]+?)}}/g, TemplateEngine.Foreach.bind({ localScope: localScope, hashCode: hashCode }));
 
     //find loadtemplate
-    match = html.match(/{{loadtemplate[^}]+?}}/g);
-    if (match) {
-
-        for (var x = 0; x < match.length; x++) {
-
-            if (TemplateEngine.settings.DEBUG) console.log("Executing " + match[x]);
-
-            //Trim tags
-            var matchArr = TemplateEngine.ClearBraceTags(match[x]);
-            var templateName = matchArr[1];
-            var preDivIndex = matchArr.indexOf("at");
-            var divId = matchArr[preDivIndex + 1];
-            var withIndex = matchArr.indexOf("with");
-            var varName = matchArr[withIndex + 1];
-            var preCallback = matchArr.indexOf("callback");
-            var instanceCallback = preCallback != -1 ? TemplateEngine.GetObjFromString(matchArr[preCallback + 1], localScope) : null;
-
-            if (preDivIndex == -1) {
-                if (TemplateEngine.settings.DEBUG) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
-                return;
-            }
-
-            if (!templateName) {
-                if (TemplateEngine.settings.DEBUG) console.log("Could not retrieve template name from: " + match[x]);
-                return;
-            }
-
-            var scopeVariable = localScope ? TemplateEngine.GetObjFromString(varName, localScope) : TemplateEngine.GetObjFromString(varName);
-
-            var callback = function (ret, divId) {
-
-                var finalcb = function () {
-                    if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + this.divId);
-                    $(document.getElementById(this.divId)).html(TemplateEngine.ParseAndReplace(this.ret, {}, this.scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
-                    $(document.getElementById(this.divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
-                }
-
-                if (this.instanceCallback) {
-                    var bicb = this.instanceCallback.bind({ ret: ret, divId: divId, scopeVariable: this.scopeVariable, hash: this.hash });
-                    TemplateEngine.callbackStack[this.hash].unshift(bicb);
-                }
-
-                var bfinalcb = finalcb.bind({ ret: ret, divId: divId, scopeVariable: this.scopeVariable, hash: this.hash });
-                TemplateEngine.callbackStack[this.hash].unshift(bfinalcb);
-
-                TemplateEngine.AttemptCallback(this.hash);
-            };
-
-            var boundCallback = callback.bind({ hash: hashCode, scopeVariable: scopeVariable, instanceCallback: instanceCallback });
-            //Add callback reference so we know when everyone is done working
-            TemplateEngine.callbackReference[hashCode]++;
-
-            TemplateEngine.LoadTemplate(templateName, boundCallback, divId);
-        }
-    }
+    html = html.replace(/{{\s*?(loadtemplate[^}]+?)}}/g, TemplateEngine.LoadTemplateParse.bind({ localScope: localScope, hashCode: hashCode }));
 
     TemplateEngine.AttemptCallback(hashCode, true);
 
@@ -586,6 +532,58 @@ TemplateEngine.Foreach = function (match, matchContents) {
 
 };
 
+TemplateEngine.LoadTemplateParse = function (match, matchContent) {
+    if (TemplateEngine.settings.DEBUG) console.log("Executing " + match);
+
+    var matchArr = matchContent.split(" ");
+    var templateName = matchArr[1];
+    var preDivIndex = matchArr.indexOf("at");
+    var divId = matchArr[preDivIndex + 1];
+    var withIndex = matchArr.indexOf("with");
+    var varName = matchArr[withIndex + 1];
+    var preCallback = matchArr.indexOf("callback");
+    var instanceCallback = preCallback != -1 ? TemplateEngine.GetObjFromString(matchArr[preCallback + 1], this.localScope) : null;
+
+    if (preDivIndex == -1) {
+        if (TemplateEngine.settings.DEBUG) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match);
+        return;
+    }
+
+    if (!templateName) {
+        if (TemplateEngine.settings.DEBUG) console.log("Could not retrieve template name from: " + match);
+        return;
+    }
+
+    var scopeVariable = this.localScope ? TemplateEngine.GetObjFromString(varName, this.localScope) : TemplateEngine.GetObjFromString(varName);
+
+    var callback = function (ret, divId) {
+
+        var finalcb = function () {
+            if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + this.divId);
+            $(document.getElementById(this.divId)).html(TemplateEngine.ParseAndReplace(this.ret, {}, this.scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
+            $(document.getElementById(this.divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
+        }
+
+        if (this.instanceCallback) {
+            var bicb = this.instanceCallback.bind({ ret: ret, divId: divId, scopeVariable: this.scopeVariable, hash: this.hash });
+            TemplateEngine.callbackStack[this.hash].unshift(bicb);
+        }
+
+        var bfinalcb = finalcb.bind({ ret: ret, divId: divId, scopeVariable: this.scopeVariable, hash: this.hash });
+        TemplateEngine.callbackStack[this.hash].unshift(bfinalcb);
+
+        TemplateEngine.AttemptCallback(this.hash);
+    };
+
+    var boundCallback = callback.bind({ hash: this.hashCode, scopeVariable: scopeVariable, instanceCallback: instanceCallback });
+    //Add callback reference so we know when everyone is done working
+    TemplateEngine.callbackReference[this.hashCode]++;
+
+    TemplateEngine.LoadTemplate(templateName, boundCallback, divId);
+
+    return "";
+};
+
 //ClearBraceTags is a function designed to remove curly braces from the outside of a string so the contents may be cleanly parsed
 TemplateEngine.ClearBraceTags = function (arr) {
 
@@ -634,3 +632,6 @@ TemplateEngine.AttemptCallback = function (hash, timeout) {
     else if (TemplateEngine.callbackReference[hash])
         TemplateEngine.callbackReference[hash]--;
 };
+
+if (this.module)
+    module.export = TemplateEngine;
