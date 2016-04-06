@@ -14,7 +14,7 @@ TemplateEngine.settings.AUTOLOAD = true;
 TemplateEngine.settings.BINDING = false;
 
 //Enable debug output to js console (WARNGING - TRUE MAY CAUSE PERFOMANCE SLOW DOWN FOR LARGE LOADS)
-TemplateEngine.settings.DEBUG = true;
+TemplateEngine.settings.DEBUG = false;
 
 TemplateEngine.settings.ANTI_XHR_CACHING = true;
 TemplateEngine.activeRequests = {};
@@ -27,6 +27,9 @@ TemplateEngine.Start = function (e, force) {
     if (TemplateEngine.settings.AUTOLOAD || force) {
         $(document.getElementsByTagName("title")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("title")[0]).html()));
         $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));
+        var metas = document.getElementsByTagName("meta");
+        for(var i in metas)
+            $(metas[i]).html(TemplateEngine.ParseAndReplace($(metas[i]).html()));
     }
 };
 
