@@ -14,15 +14,23 @@ TemplateEngine.settings.AUTOLOAD = true;
 TemplateEngine.settings.BINDING = false;
 
 //Enable debug output to js console (WARNGING - TRUE MAY CAUSE PERFOMANCE SLOW DOWN FOR LARGE LOADS)
-TemplateEngine.settings.DEBUG = true;
+TemplateEngine.settings.DEBUG = false;
 
+TemplateEngine.settings.ANTI_XHR_CACHING = true;
+TemplateEngine.activeRequests = {};
 
-
+TemplateEngine.callbackReference = {};
+TemplateEngine.callbackStack = {};
 
 //Template Engine start point
-TemplateEngine.Start = function () {
-    if (TemplateEngine.settings.AUTOLOAD)
+TemplateEngine.Start = function (e, force) {
+    if (TemplateEngine.settings.AUTOLOAD || force) {
+        $(document.getElementsByTagName("title")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("title")[0]).html()));
         $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));
+        var metas = document.getElementsByTagName("meta");
+        for(var i in metas)
+            $(metas[i]).html(TemplateEngine.ParseAndReplace($(metas[i]).html()));
+    }
 };
 
 document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
@@ -40,18 +48,33 @@ document.addEventListener('DOMContentLoaded', TemplateEngine.Start, false);
 //{{foreach iterableVariable loadtemplate template.html at htmlElementId}} - loads a template and iterates over an object or array. The template is loaded as many times as the iterableVariable is iterable, with theiterableVariable being passed as the local context for another round of ParsAndReplace on the loaded template.
 
 //ParseAndreplace also accepts a replaceMatrix which can be used to define for more sohpisticated templating needs. In the example below the html {{email_subscription}} is replaced by the word "CHECKED" which checks a checkbox if the user is subscribed to email newsletters.
-// $("#userProfileBody").html(ParseAndReplace(sessionStorage["userProfileBody.html"], {
+// $("#userProfileBody").html(ParseAndReplace("<input type='checkbox' {{email_subscription}}>", {
 //"{{email_subscrption}}": user.preferences.email_subscription ? "CHECKED" : ""
 //}));
 
-TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, fullScope, cb) {
+TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, fullScope, cb, hashCode) {
     if (!fullScope)
         fullScope = "";
 
     if (!localScope)
         localScope = window;
 
-    var requiresRecursion = false;
+    //setup callback tracker so I know when we're done
+    if (!hashCode) {
+        hashCode = TemplateEngine.HashCode(html);
+        if (TemplateEngine.callbackReference[hashCode])
+            TemplateEngine.callbackReference[hashCode]++;
+        else
+            TemplateEngine.callbackReference[hashCode] = 1;
+
+        if (TemplateEngine.callbackStack[hashCode] && cb)
+            TemplateEngine.callbackStack[hashCode].push(cb);
+        else if (!TemplateEngine.callbackStack[hashCode])
+            TemplateEngine.callbackStack[hashCode] = cb ? [cb] : [];
+
+    }
+    else
+        TemplateEngine.callbackReference[hashCode]++;
 
     if (replaceMatrix) {
         for (var key in replaceMatrix) {
@@ -61,175 +84,27 @@ TemplateEngine.ParseAndReplace = function (html, replaceMatrix, localScope, full
         }
     }
 
+    //Find and replace bound variables (must be done before other variable replacement as there is an overlap in regex values)
+    var findTwoWayBinds = TemplateEngine.settings.BINDING ? /(<input[^>]*?{{\s*?([^\s]+?)\s*?}}[^>]*?>)/gi : /(<input[^>]*?{{\s*?[^\s]+?\.bind(\s|\.|$)*?}}[^>]*?>)/gi;
+    html = html.replace(findTwoWayBinds, TemplateEngine.TwoWayBinding.bind({replaceMatrix: replaceMatrix, localScope: localScope, fullScope: fullScope, cb: cb, hashCode: hashCode}));
+
     //find and replace variable names
-    var matchNames = html.match(/{{*[^\s}]*}}/g);
-    if (matchNames) {
-        for (var i = 0; i < matchNames.length; i++) {
-            var namesArr = TemplateEngine.ClearBraceTags(matchNames[i]);
-            var variableDictionary = {};
-            for (var n = 0; n < namesArr.length; n++) {
-                var variableValue;
-                var binding = TemplateEngine.settings.BINDING;
-
-                if (namesArr[n].match(/\.unbind/g)) {
-                    binding = false;
-                    namesArr[n].replace(/\.unbind/g, "");
-                }
-                else
-                    if (namesArr[n].match(/\.bind/g)) {
-                        binding = true;
-                        namesArr[n].replace(/\.bind/g, "");
-                    }
-
-                if (variableDictionary[namesArr[n]])
-                    variableValue = variableDictionary[namesArr[n]];
-                else {
-                    variableValue = TemplateEngine.GetObjFromString(namesArr[n], localScope);
-                    variableDictionary[namesArr[n]] = variableValue;
-                    if (TemplateEngine.settings.DEBUG) console.log("setting value " + namesArr[n] + " = " + variableValue);
-                }
-
-                //add binding hooks
-                if (binding) {
-                    variableValue = "<span class='binding_hook_" + fullScope + namesArr[n] + "'>" + variableValue + "</span>";
-                    var parentScope = TemplateEngine.GetObjFromString(namesArr[n], localScope, true);
-                    var lastTerm = TemplateEngine.GetLastPathTerm(namesArr[n], localScope);
-
-                    if (parentScope && lastTerm) {
-                        var setFunc = function (val) {
-                            if (TemplateEngine.settings.DEBUG) console.log("Searching for binding hook: binding_hook_" + fullScope + this.prop);
-
-                            var elements = document.getElementsByClassName("binding_hook_" + fullScope + this.prop);
-                            for (var index = 0; index < elements.length; index++) {
-                                elements[index].innerHTML = val;
-                            }
-                            parentScope[lastTerm] = val;
-                        };
-
-                        if (TemplateEngine.settings.DEBUG) console.log("Setting up binding hook on: " + JSON.stringify(parentScope));
-
-                        var boundSetFunc = setFunc.bind({ prop: namesArr[n], parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope });
-
-                        parentScope.__defineSetter__("_" + lastTerm, boundSetFunc);
-
-
-                    }
-                    else
-                        if (TemplateEngine.settings.DEBUG) console.log("Unable to perform binding, variable undefined");
-
-                }
-
-                var re = new RegExp("{{" + namesArr[n] + "}}", "g");
-                html = html.replace(re, variableValue);
-            }
-        }
-
-    }
-
+    html = html.replace(/{{\s*?([^\s]+?)\s*?}}/g, TemplateEngine.ReplaceStrWithObjVal.bind({localScope: localScope, fullScope: fullScope}));
     
+
     //find foreach
-    var match = html.match(/{{foreach.*}}/g);
-    if (match) {
-        requiresRecursion = true;
-        for (var i = 0; i < match.length; i++) {
-
-            if (TemplateEngine.settings.DEBUG) console.log("Executing: " + match[i]);
-
-            //Trim tags
-            var matchArr = TemplateEngine.ClearBraceTags(match[i]);
-            var lastMatch = matchArr[matchArr.length - 1];
-
-            //Get foreach object
-            var foreachArr = localScope ? TemplateEngine.GetObjFromString(matchArr[1], localScope) : TemplateEngine.GetObjFromString(matchArr[1]);
-            if (TemplateEngine.settings.DEBUG) console.log("foreach length: " + foreachArr.length);
-
-            //look for keywords
-            var loadtemplate = matchArr.indexOf("loadtemplate");
-            var preDivIndex = matchArr.indexOf("at");
-            var divId = matchArr[preDivIndex + 1];
-
-            if (loadtemplate != -1 && preDivIndex != -1) {
-                var templateName = matchArr[loadtemplate + 1];
-                //Do template binding
-                var callback = function (ret, divId) {
-
-                    //foreach through template
-                    for (var x = 0; x < foreachArr.length; x++) {
-                        $(document.getElementById(divId)).append(TemplateEngine.ParseAndReplace(ret, {}, this.foreachArr[x], this.arrPath + "[" + x + "]."));
-                    }
-                    if (cb)
-                        cb();
-                    $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
-                    return true;
-                };
-
-                var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr, cb: cb });
-
-                //load template
-                TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], boundCallback, divId);
-
-            }
-            else
-                if (TemplateEngine.settings.DEBUG) console.log("Foreach failed due to no loadtemplate command or no divId");
-
-            //Clear foreach content
-            html = html.replace(/{{foreach.*}}/g, "");
-        }
-
-    }
-
+    html = html.replace(/{{\s*?(foreach[^}]+?)}}/g, TemplateEngine.Foreach.bind({ localScope: localScope, hashCode: hashCode }));
 
     //find loadtemplate
-    match = html.match(/{{loadtemplate.*}}/g);
-    if (match) {
-        requiresRecursion = true;
-        for (var x = 0; x < match.length; x++) {
+    html = html.replace(/{{\s*?(loadtemplate[^}]+?)}}/g, TemplateEngine.LoadTemplateParse.bind({ localScope: localScope, hashCode: hashCode }));
 
-            if (TemplateEngine.settings.DEBUG) console.log("Executing " + match[x]);
-
-            //Trim tags
-            var matchArr = TemplateEngine.ClearBraceTags(match[x]);
-            var templateName = matchArr[1];
-            var preDivIndex = matchArr.indexOf("at");
-            var divId = matchArr[preDivIndex + 1];
-            var withIndex = matchArr.indexOf("with");
-            var varName = matchArr[withIndex + 1];
-
-
-            if (preDivIndex == -1) {
-                if (TemplateEngine.settings.DEBUG) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match[x]);
-                return;
-            }
-
-            if (!templateName) {
-                if (TemplateEngine.settings.DEBUG) console.log("Could not retrieve template name from: " + match[x]);
-                return;
-            }
-
-            var scopeVariable = localScope ? TemplateEngine.GetObjFromString(varName, localScope) : TemplateEngine.GetObjFromString(varName);
-
-            var callback = function (ret, divId) {
-                if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + divId);
-                $(document.getElementById(divId)).html(TemplateEngine.ParseAndReplace(ret, {}, scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
-                $(document.getElementById(divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
-                if (cb)
-                    cb();
-            };
-
-            var boundCallback = callback.bind({ cb: cb });
-
-            TemplateEngine.LoadTemplate(templateName, boundCallback, divId);
-        }
-    }
-
-    if (!requiresRecursion && cb)
-        cb();
+    TemplateEngine.AttemptCallback(hashCode, true);
 
     return html;
 };
 
 
-//Load template creates a request to load additional content, stores it to session storage if a load is successful, and calls the HandleResponse call back.
+//Load template creates a request to load additional content, stores it to session storage if a load is successful, and calls the call back.
 TemplateEngine.LoadTemplate = function (filename, callback, divId) {
 
     var fileDir = "";
@@ -237,10 +112,35 @@ TemplateEngine.LoadTemplate = function (filename, callback, divId) {
         fileDir = TemplateEngine.settings.VIEWS_FOLDER + "/";
     }
 
+    if (TemplateEngine.settings.ANTI_XHR_CACHING) {
+        if (sessionStorage[filename]) {
+            callback(sessionStorage[filename], divId);
+            return;
+        }
+
+        if (TemplateEngine.activeRequests[filename]) {
+            TemplateEngine.activeRequests[filename].push({ callback: callback, divId: divId });
+            return;
+        }
+
+        TemplateEngine.activeRequests[filename] = [];
+    }
+
+
+
+
     var r = new XMLHttpRequest();
     r.open("GET", fileDir + filename, true);
     r.onreadystatechange = function () {
-        if (r.readyState != 4 || r.status != 200) return;
+        if (r.readyState != 4 || r.status != 200)
+            return;
+        if (TemplateEngine.settings.ANTI_XHR_CACHING) {
+            sessionStorage[filename] = r.responseText;
+            for (var i in TemplateEngine.activeRequests[filename])
+                TemplateEngine.activeRequests[filename][i].callback(r.responseText, TemplateEngine.activeRequests[filename][i].divId);
+            TemplateEngine.activeRequests[filename] = null;
+        }
+
         callback(r.responseText, divId);
     };
     r.send(null);
@@ -255,45 +155,39 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
 
     //Do all pre-object serach template parsing
 
-    //Avoid digging through path if already parsed down
-    if (getLocalScope) {
-        if (objectPath.length == 1)
-            return localScope;
-    }
-
-    //Remove binding
-    objectPath = objectPath.replace(/\.bind/g, "");
-    objectPath = objectPath.replace(/\.unbind/g, "");
+    //Remove binding - todo stop truncating of var names with keywords in them
+    objectPath = objectPath.replace(/(\.bind)(\s|\.|$)+/g, "$2");
+    objectPath = objectPath.replace(/(\.unbind)(\s|\.|$)+/g, "$2");
 
     var json = false;
     if (objectPath.match(/\.json/)) {
         json = true;
-        objectPath = objectPath.replace(/\.json/g, "");
+        objectPath = objectPath.replace(/(\.json)(\s|\.|$)+/g, "$2");
     }
 
     //I don't need this.
     if (objectPath.match("this")) {
-        objectPath = objectPath.replace(/this\./g, "");
+        objectPath = objectPath.replace(/(\s|^)+(this\.)/g, "$1");
         if (objectPath == "this")
             return localScope;
     }
-        
+
 
     var todate = false;
     var local = false;
-    if (objectPath.match(/\.todate/)) {
+    if (objectPath.match(/(\.todate)(\s|\.|$)+/)) {
         todate = true;
-        objectPath = objectPath.replace(/\.todate/g, "");
+        objectPath = objectPath.replace(/(\.todate)(\s|\.|$)+/g, "$2");
 
         if (objectPath.match(/\.local/)) {
             local = true;
-            objectPath = objectPath.replace(/\.local/g, "");
+            objectPath = objectPath.replace(/(\.local)(\s|\.|$)+/g, "$2");
         }
     }
 
     var replaceWhite = false;
     var replaceWith = "";
-    if (objectPath.match(/\.replace-whitespace/)) {
+    if (objectPath.match(/\.replace-whitespace\./)) {
         replaceWhite = true;
         var re = new RegExp("(?:\.replace-whitespace\.)(.[^.\n]*)", "g");
         replaceWith = re.exec(objectPath)[1];
@@ -301,8 +195,14 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
     }
 
 
-    //Start object search
+    //Avoid digging through path if already parsed down
     objectPath = objectPath.split(".");
+    if (getLocalScope) {
+        if (objectPath.length == 1)
+            return localScope;
+    }
+
+    //Start object search
     var foundVariable;
     var n = 0;
     var tmp = localScope;
@@ -353,12 +253,345 @@ TemplateEngine.GetObjFromString = function (objectPath, localScope, getLocalScop
     return foundVariable;
 };
 
+TemplateEngine.ReplaceStrWithObjVal = function (match, objectPath) {
+
+    //Do all pre-object serach template parsing
+
+    //Remove binding
+    var binding = TemplateEngine.settings.BINDING;
+    if (objectPath.match(/(\.bind)(\s|\.|$)+/)) {
+        binding = true;
+        objectPath = objectPath.replace(/(\.bind)(\s|\.|$)+?/, "$2");
+    }
+    else if (objectPath.match(/(\.unbind)(\s|\.|$)+/)) {
+        binding = false;
+        objectPath = objectPath.replace(/(\.unbind)(\s|\.|$)+?/, "$2");
+    }
+
+    var unbound_objectPath = objectPath;
+
+    var json = false;
+    if (objectPath.match(/\.json/)) {
+        json = true;
+        objectPath = objectPath.replace(/(\.json)(\s|\.|$)+?/g, "$2");
+    }
+
+    //I don't need this.
+    if (objectPath.match("this")) {
+        objectPath = objectPath.replace(/(\s|^)+(this\.)/g, "$1");
+        if (objectPath == "this")
+            return this.localScope;
+    }
+
+    var todate = false;
+    var local = false;
+    if (objectPath.match(/(\.todate)(\s|\.|$)+/)) {
+        todate = true;
+        objectPath = objectPath.replace(/(\.todate)(\s|\.|$)+?/g, "$2");
+
+        if (objectPath.match(/\.local/)) {
+            local = true;
+            objectPath = objectPath.replace(/(\.local)(\s|\.|$)+?/g, "$2");
+        }
+    }
+
+    var replaceWhite = false;
+    var replaceWith = "";
+    if (objectPath.match(/\.replace-whitespace\./)) {
+        replaceWhite = true;
+        var re = new RegExp("(?:\.replace-whitespace\.)(.[^.\n]*?)", "g");
+        replaceWith = re.exec(objectPath)[1];
+        objectPath = objectPath.replace(/\.replace-whitespace\..[^.\n]*/g, "");
+    }
+
+    objectPath = objectPath.split(".");
+
+    //Start object search
+    var foundVariable;
+    var tmp = this.localScope;
+    if (objectPath.length == 0)
+        foundVariable = this.localScope;
+    else
+        for(var n = 0, l = objectPath.length; n < l; n++)
+        {
+            tmp = tmp[objectPath[n]];
+            if (tmp == undefined || tmp == "NaN")
+                return "";
+        }
+    foundVariable = tmp;
+
+    //Apply object templating and return values
+    if (todate) {
+        var date;
+        if (local) {
+            date = new Date(foundVariable);
+            foundVariable = date.toLocaleString();
+        }
+        else {
+            date = new Date(parseInt(foundVariable));
+            foundVariable = date.toISOString().substr(0, 10);
+        }
+    }
+
+    if (replaceWhite) {
+        var re = new RegExp(" ", "g");
+        foundVariable = foundVariable.replace(re, replaceWith);
+    }
+
+    if (json)
+        foundVariable = JSON.stringify(foundVariable);
+
+    if (binding)
+        foundVariable = TemplateEngine.OneWayBinding(unbound_objectPath, this.localScope, this.fullScope, foundVariable);
+
+    return foundVariable;
+};
+
+TemplateEngine.OneWayBinding = function (objectPath, localScope, fullScope, variableValue) {
+    //add one way binding hooks
+    var parentScope = TemplateEngine.GetObjFromString(objectPath, localScope, true);
+    var lastTerm = TemplateEngine.GetLastPathTerm(objectPath, localScope);
+
+    if (parentScope && lastTerm) {
+
+        variableValue = "<span class='binding_hook_" + fullScope + objectPath + "'>" + variableValue + "</span>";
+        var setFunc = function (val) {
+            if (TemplateEngine.settings.DEBUG) console.log("Searching for one way binding hook: binding_hook_" + this.fullScope + this.objectPath);
+            parentScope[lastTerm] = val;
+            var elements = document.getElementsByClassName("binding_hook_" + this.fullScope + this.objectPath);
+            for (var index = 0; index < elements.length; index++) {
+                elements[index].innerHTML = TemplateEngine.ReplaceStrWithObjVal.bind({localScope: this.localScope, fullScope: this.fullScope})(null, this.objectPath);
+            }
+        };
+
+        if (TemplateEngine.settings.DEBUG) console.log("Setting up one way binding hook on: " + fullScope + objectPath);
+
+        var boundSetFunc = setFunc.bind({ objectPath: objectPath, parentScope: parentScope, lastTerm: lastTerm, fullScope: fullScope, localScope: localScope });
+
+        parentScope.__defineSetter__("_" + lastTerm, boundSetFunc);
+
+
+    }
+    else
+        if (TemplateEngine.settings.DEBUG) console.log("Unable to perform one way binding on " + fullScope + objectPath + ", variable undefined");
+
+    return variableValue;
+};
+
+TemplateEngine.TwoWayBinding = function (match, matchContents) {
+
+    //Get ID and value
+    var inputIdArr = match.match(/(?:id=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
+    if (!inputIdArr) {
+        if (TemplateEngine.settings.DEBUG) console.log("No ID found on input which includes bindings, please make sure your inputs have an ID attribute.");
+        return;
+    }
+    var inputId = inputIdArr[1];
+
+    var inputValArr = match.match(/(?:value=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
+
+
+    var inputTypeArr = match.match(/(?:type=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
+    var inputType = inputTypeArr ? inputTypeArr[1] : null;
+
+    //let last item in list be value equivilant based on type
+    var attributeList = [];
+    if (inputValArr) {
+        attributeList.push({ attribute: "value", inputVal: inputValArr[1], unbound: inputValArr[1].replace(/(\.(?:un)*?bind)/, "") });
+    }
+    if (inputType && inputType.match(/radio|checkbox/g)) {
+        var checkedVal = match.match(/(?:checked=)(?:"|'|&quot;|&#34;|&#39;)((?:(?!"|'|&quot;|&#34;|&#39;).)*)(?:"|'|&quot;|&#34;|&#39;)/i);
+        if (checkedVal)
+            attributeList.push({ attribute: "checked", inputVal: checkedVal[1], unbound: checkedVal[1].replace(/(\.(?:un)*?bind)/, "") });
+    }
+
+
+    //Parse Id
+    var parsedId = TemplateEngine.ParseAndReplace(inputId, this.replaceMatrix, this.localScope, this.fullScope, this.cb, this.hashCode);
+
+    var templateInputRe = new RegExp("(id=)(" + '"' + "|'|&quot;|&#34;|&#39;)(" + inputId + ")(" + '"' + "|'|&quot;|&#34;|&#39;)", "gi")
+    var templatedInput = match.replace(templateInputRe, "$1$2" + parsedId + "$4");
+
+
+
+    for (var x = 0, l = attributeList.length; x < l; x++) {
+        //Parse value
+        attributeList[x].parsedVal = TemplateEngine.ParseAndReplace(attributeList[x].unbound, this.replaceMatrix, this.localScope, this.fullScope, this.cb, this.hashCode);
+
+        //Get two way bind variables
+        var foundTemplates = /(?:{{\s*?)([^\s]+?)(?:\s*?}})/g.exec(attributeList[x].unbound);
+        for (var n = 1, fl = foundTemplates.length; n < fl; n++) {
+            var namesArr = foundTemplates[n];
+            //Create binding target
+            var parentScope = TemplateEngine.GetObjFromString(namesArr, this.localScope, true);
+            var lastTerm = TemplateEngine.GetLastPathTerm(namesArr, this.localScope);
+
+            if (parentScope && lastTerm) {
+
+
+                var setFunc = function (val) {
+                    if (TemplateEngine.settings.DEBUG) console.log("Searching for two way binding hook: " + this.parsedId + " " + this.fullScope + this.prop);
+
+                    this.parentScope[this.lastTerm] = val;
+                    var fullScopeTrunc = this.fullScope.slice(0, this.fullScope.length - 1);
+                    var fullScopeObj = TemplateEngine.ReplaceStrWithObjVal.bind({ localScope: window, fullScope: this.fullScope })(null, fullScopeTrunc);
+                    var newVal = TemplateEngine.ParseAndReplace(this.inputVal, this.replaceMatrix, fullScopeObj == "" ? window : fullScopeObj);
+
+                    if (typeof val == "boolean")
+                        newVal = (newVal == "true");
+
+                    $("#" + this.parsedId).prop(this.attribute, newVal);
+                };
+
+                if (TemplateEngine.settings.DEBUG) console.log("Setting up two way binding hook on input " + parsedId + ": " + this.fullScope + namesArr);
+
+                var boundSetFunc = setFunc.bind({ prop: namesArr, parentScope: parentScope, lastTerm: lastTerm, fullScope: this.fullScope, parsedId: parsedId, attribute: attributeList[x].attribute, inputVal: attributeList[x].unbound, replaceMatrix: this.replaceMatrix });
+
+                //BIND _variable -> variable, _variable -> input
+                parentScope.__defineSetter__("_" + lastTerm, boundSetFunc);
+
+                //replace two way bound template in html so it isn't one way bound later
+                templateInputRe = new RegExp("(" + attributeList[x].attribute + "=)(" + '"' + "|'|&quot;|&#34;|&#39;)(" + attributeList[x].inputVal + ")(" + '"' + "|'|&quot;|&#34;|&#39;)", "gi");
+                templatedInput = templatedInput.replace(templateInputRe, "$1$2" + attributeList[x].parsedVal + "$4");
+
+            }
+            else
+                if (TemplateEngine.settings.DEBUG) console.log("Unable to perform two way binding on " + namesArr + ", variable undefined");
+        }
+
+    }
+
+    //BIND input -> _variable - Set the .change event through JSONP because our ID isn't written necessarily yet
+    templatedInput += '<script>' +
+                '$("#' + parsedId + '").change(function() {' +
+                this.fullScope + "_" + lastTerm + "=" + '$("#' + parsedId + '").prop("' + attributeList[attributeList.length - 1].attribute + '");' +
+                '});' +
+            '</script>';
+
+    //Final replace
+    if (TemplateEngine.settings.DEBUG) console.log("Two way binding initialized output: " + templatedInput);
+    return templatedInput;
+};
+
+TemplateEngine.Foreach = function (match, matchContents) {
+    if (TemplateEngine.settings.DEBUG) console.log("Executing: " + match );
+
+    //Trim tags
+    var matchArr = matchContents.split(" ");
+
+    //Get foreach object
+    var foreachArr = TemplateEngine.GetObjFromString(matchArr[1], this.localScope);
+    if (TemplateEngine.settings.DEBUG) console.log(matchArr[1] + " length: " + foreachArr.length);
+
+    //look for keywords
+    var loadtemplate = matchArr.indexOf("loadtemplate");
+    var preDivIndex = matchArr.indexOf("at");
+    var preLocalScope = matchArr.indexOf("with");
+    var preCallback = matchArr.indexOf("callback");
+    var instanceCallback = preCallback != -1 ? TemplateEngine.GetObjFromString(matchArr[preCallback + 1], this.localScope) : null;
+    var divId = matchArr[preDivIndex + 1];
+    var scopeVariable = preLocalScope != -1 ? TemplateEngine.GetObjFromString(matchArr[preLocalScope + 1], this.localScope) : null;
+
+    if (loadtemplate != -1 && preDivIndex != -1) {
+        var templateName = matchArr[loadtemplate + 1];
+        //Do template binding
+        var callback = function (ret, divId) {
+
+            if (this.instanceCallback) {
+                var bicb = this.instanceCallback.bind({ ret: ret, divId: divId, arrPath: this.arrPath, foreachArr: this.foreachArr, scopeVariable: this.scopeVariable, hash: this.hash });
+                TemplateEngine.callbackStack[this.hash].unshift(bicb);
+            }
+
+            var finalcb = function () {
+                //foreach through template
+                for (var x = 0, l = this.foreachArr.length; x < l; x++) {
+                    var scope = this.scopeVariable ? this.scopeVariable : this.foreachArr[x];
+                    $(document.getElementById(this.divId)).append(TemplateEngine.ParseAndReplace(this.ret, {}, scope, this.arrPath + "[" + x + "]."));
+                }
+                $(document.getElementById(this.divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
+            }
+
+            var bfinalcb = finalcb.bind({ ret: ret, divId: divId, arrPath: this.arrPath, foreachArr: this.foreachArr, scopeVariable: this.scopeVariable, hash: this.hash });
+            TemplateEngine.callbackStack[this.hash].unshift(bfinalcb);
+
+            TemplateEngine.AttemptCallback(this.hash);
+            return true;
+        };
+
+        var boundCallback = callback.bind({ arrPath: matchArr[1], foreachArr: foreachArr, scopeVariable: scopeVariable, hash: this.hashCode, instanceCallback: instanceCallback });
+
+
+        //Add callback reference so we know when everyone is done working
+        TemplateEngine.callbackReference[this.hashCode]++;
+
+        //load template
+        TemplateEngine.LoadTemplate(matchArr[loadtemplate + 1], boundCallback, divId);
+
+    }
+    else
+        if (TemplateEngine.settings.DEBUG) console.log("Foreach failed due to no loadtemplate command or no divId");
+
+    return "";
+
+};
+
+TemplateEngine.LoadTemplateParse = function (match, matchContent) {
+    if (TemplateEngine.settings.DEBUG) console.log("Executing " + match);
+
+    var matchArr = matchContent.split(" ");
+    var templateName = matchArr[1];
+    var preDivIndex = matchArr.indexOf("at");
+    var divId = matchArr[preDivIndex + 1];
+    var withIndex = matchArr.indexOf("with");
+    var varName = matchArr[withIndex + 1];
+    var preCallback = matchArr.indexOf("callback");
+    var instanceCallback = preCallback != -1 ? TemplateEngine.GetObjFromString(matchArr[preCallback + 1], this.localScope) : null;
+
+    if (preDivIndex == -1) {
+        if (TemplateEngine.settings.DEBUG) console.log("unable to load without 'at' keyword. Include 'at div_id' in your code referencing the location you wish to populate with a template on statement: " + match);
+        return;
+    }
+
+    if (!templateName) {
+        if (TemplateEngine.settings.DEBUG) console.log("Could not retrieve template name from: " + match);
+        return;
+    }
+
+    var scopeVariable = this.localScope ? TemplateEngine.GetObjFromString(varName, this.localScope) : TemplateEngine.GetObjFromString(varName);
+
+    var callback = function (ret, divId) {
+
+        var finalcb = function () {
+            if (TemplateEngine.settings.DEBUG) console.log("Executing template callback " + this.divId);
+            $(document.getElementById(this.divId)).html(TemplateEngine.ParseAndReplace(this.ret, {}, this.scopeVariable)); //document.getElementById(divId).innerHTML = TemplateEngine.ParseAndReplace(ret, {}, scopeVariable);
+            $(document.getElementById(this.divId)).removeClass(TemplateEngine.settings.HIDDEN_CLASS);
+        }
+
+        if (this.instanceCallback) {
+            var bicb = this.instanceCallback.bind({ ret: ret, divId: divId, scopeVariable: this.scopeVariable, hash: this.hash });
+            TemplateEngine.callbackStack[this.hash].unshift(bicb);
+        }
+
+        var bfinalcb = finalcb.bind({ ret: ret, divId: divId, scopeVariable: this.scopeVariable, hash: this.hash });
+        TemplateEngine.callbackStack[this.hash].unshift(bfinalcb);
+
+        TemplateEngine.AttemptCallback(this.hash);
+    };
+
+    var boundCallback = callback.bind({ hash: this.hashCode, scopeVariable: scopeVariable, instanceCallback: instanceCallback });
+    //Add callback reference so we know when everyone is done working
+    TemplateEngine.callbackReference[this.hashCode]++;
+
+    TemplateEngine.LoadTemplate(templateName, boundCallback, divId);
+
+    return "";
+};
 
 //ClearBraceTags is a function designed to remove curly braces from the outside of a string so the contents may be cleanly parsed
 TemplateEngine.ClearBraceTags = function (arr) {
 
-    arr = arr.toString().replace(/{{/g, "");
-    arr = arr.replace(/}}/g, "");
+    arr = arr.toString().replace(/{{\s*/g, "");
+    arr = arr.replace(/\s*}}/g, "");
     return arr.split(" ");
 };
 
@@ -370,7 +603,38 @@ TemplateEngine.GetLastPathTerm = function (objectPath, localScope) {
         objectPath = objectPath.slice(0, objectPath.length - 1);
     if (objectPath.length == 0)
         return localScope;
-    else 
+    else
         return objectPath[objectPath.length - 1];
-    
+
 };
+
+TemplateEngine.HashCode = function (str) {
+    var hash = 0;
+    if (str.length === 0)
+        return hash;
+    for (var i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash;
+};
+
+TemplateEngine.AttemptCallback = function (hash, timeout) {
+    if (TemplateEngine.callbackReference[hash] && TemplateEngine.callbackReference[hash] <= 1 && TemplateEngine.callbackStack[hash]) {
+        TemplateEngine.callbackReference[hash] = null;
+        if (timeout) {
+            setTimeout(function () {
+                for (var i in TemplateEngine.callbackStack[hash])
+                    TemplateEngine.callbackStack[hash][i]();
+            }, 0);
+            return;
+        }
+        for (var i in TemplateEngine.callbackStack[hash])
+            TemplateEngine.callbackStack[hash][i]();
+    }
+    else if (TemplateEngine.callbackReference[hash])
+        TemplateEngine.callbackReference[hash]--;
+};
+
+if (this.module)
+    module.export = TemplateEngine;
