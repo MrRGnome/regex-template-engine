@@ -9,6 +9,9 @@ TemplateEngine.settings.HIDDEN_CLASS = "hidden";
 
 //Auto parse document
 TemplateEngine.settings.AUTOLOAD = true;
+/*
+//Should document be hidden until some future parsed point?
+TemplateEngine.settings.HIDE_TEMPLATE = false;*/
 
 //Enable one-way binding where changes to the javascript variable are reflected to the HTML template (Alpha feature, may experience bugs. Disabled by default)
 TemplateEngine.settings.BINDING = false;
@@ -16,7 +19,9 @@ TemplateEngine.settings.BINDING = false;
 //Enable debug output to js console (WARNGING - TRUE MAY CAUSE PERFOMANCE SLOW DOWN FOR LARGE LOADS)
 TemplateEngine.settings.DEBUG = false;
 
+//Enable ANTI_XHR_CACHING to store retrieved templates in sessionStorage - increases performance on documents with multiple requests to the same template
 TemplateEngine.settings.ANTI_XHR_CACHING = true;
+
 TemplateEngine.activeRequests = {};
 
 TemplateEngine.callbackReference = {};
@@ -28,8 +33,13 @@ TemplateEngine.Start = function (e, force) {
         $(document.getElementsByTagName("title")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("title")[0]).html()));
         $(document.getElementsByTagName("body")[0]).html(TemplateEngine.ParseAndReplace($(document.getElementsByTagName("body")[0]).html()));
         var metas = document.getElementsByTagName("meta");
-        for(var i in metas)
-            $(metas[i]).html(TemplateEngine.ParseAndReplace($(metas[i]).html()));
+        for (var i in metas) {
+            if (metas[i].hasAttribute("content")) {
+                var content = $(metas[i]).attr("content");
+                if (content)
+                    $(metas[i]).attr("content", TemplateEngine.ParseAndReplace(content));
+            }
+        }
     }
 };
 
